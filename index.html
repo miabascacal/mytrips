@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>MyTrips</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 30px; }
+    .trip { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: pointer; }
+    .event { margin-left: 20px; padding: 5px; border-left: 3px solid #007bff; }
+  </style>
+</head>
+<body>
+  <h1>✈️ MyTrips</h1>
+  <h2>Mis viajes</h2>
+  <div id="trips"></div>
+
+  <h2>Timeline</h2>
+  <div id="events"></div>
+
+  <script>
+    const SUPABASE_URL = 'PEGA_AQUI_TU_SUPABASE_URL';
+    const SUPABASE_KEY = 'PEGA_AQUI_TU_SUPABASE_ANON_KEY';
+
+    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function loadTrips() {
+      const { data, error } = await supabase.from('trips').select('*');
+      const tripsDiv = document.getElementById('trips');
+      tripsDiv.innerHTML = '';
+
+      if (error) {
+        tripsDiv.innerText = 'Error cargando viajes';
+        return;
+      }
+
+      data.forEach(trip => {
+        const div = document.createElement('div');
+        div.className = 'trip';
+        div.innerText = trip.title;
+        div.onclick = () => loadEvents(trip.id);
+        tripsDiv.appendChild(div);
+      });
+    }
+
+    async function loadEvents(tripId) {
+      const { data } = await supabase
+        .from('events')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('start_time');
+
+      const eventsDiv = document.getElementById('events');
+      eventsDiv.innerHTML = '';
+
+      (data || []).forEach(event => {
+        const div = document.createElement('div');
+        div.className = 'event';
+        div.innerHTML = `<strong>${event.type}</strong>: ${event.title}`;
+        eventsDiv.appendChild(div);
+      });
+    }
+
+    loadTrips();
+  </script>
+</body>
+</html>
