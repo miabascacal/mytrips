@@ -1,11 +1,23 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <!-- ============================================================
+    ✅ HEAD / CONFIG BÁSICA
+    - meta charset + viewport para que se vea bien en móvil
+    - título de la pestaña
+    - supabase-js para leer tu base de datos desde el navegador
+  ============================================================ -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MyTrips</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
+    /* ============================================================
+      ✅ VARIABLES DE TEMA (COLORES)
+      - Aquí defines colores globales y fondos por tipo de evento
+      - Si quieres cambiar el look de toda la app, lo haces aquí
+    ============================================================ */
     :root{
       --bg:#ffffff;
       --text:#111;
@@ -27,6 +39,9 @@
       --otherBg: rgba(100,116,139,.08);
     }
 
+    /* ============================================================
+      ✅ ESTILO GENERAL DE PÁGINA
+    ============================================================ */
     body{
       font-family: Arial, sans-serif;
       margin: 0;
@@ -60,7 +75,11 @@
 
     .muted { color: var(--muted); font-size: 13px; }
 
-    /* Trips */
+    /* ============================================================
+      ✅ LISTA DE VIAJES (TRIPS)
+      - Cada trip se pinta como “tarjeta clickeable”
+      - .active marca el viaje seleccionado
+    ============================================================ */
     .trip{
       border: 1px solid var(--border);
       padding: 12px 14px;
@@ -77,7 +96,10 @@
       background: #f5f7ff;
     }
 
-    /* Day header */
+    /* ============================================================
+      ✅ ENCABEZADO DE DÍA EN TIMELINE
+      - “Píldora” con fecha y línea horizontal
+    ============================================================ */
     .day-row{
       margin-top: 18px;
       display:flex;
@@ -95,7 +117,10 @@
     }
     .day-line{ height: 1px; flex:1; background: var(--border); }
 
-    /* Events */
+    /* ============================================================
+      ✅ TARJETA DE EVENTO
+      - Card con ícono, título, hora, descripción, badges y alertas
+    ============================================================ */
     .event{
       display:flex;
       gap: 12px;
@@ -145,7 +170,11 @@
       white-space: nowrap;
     }
 
-    /* ✅ NUEVO (D4.1): alertas */
+    /* ============================================================
+      ✅ ALERTAS (UI)
+      - Chips como: “✅ Check-in disponible”, “⏰ Salir al aeropuerto…”
+      - Son solo VISUALES (no notificación del navegador)
+    ============================================================ */
     .alert-row{
       margin-top: 8px;
       display:flex;
@@ -197,7 +226,12 @@
       color: var(--muted);
     }
 
-    /* badges "PRO" desde metadata */
+    /* ============================================================
+      ✅ BADGES "PRO" (metadata)
+      - Aquí salen los datos adicionales: airline, flight_number,
+        checkin_url, hotel_name, operator, etc.
+      - También el link "Mapa" usando location o coords
+    ============================================================ */
     .pro-row{
       margin-top: 8px;
       display:flex;
@@ -215,7 +249,11 @@
     .pro-badge strong{ color:#111; font-weight: 700; }
     .pro-badge a{ color: inherit; text-decoration: underline; }
 
-    /* ✅ NUEVO (D4.2): barra de notificaciones */
+    /* ============================================================
+      ✅ TOOLBAR NOTIFICACIONES
+      - Botón “Activar notificaciones”
+      - Texto de estado (si están activadas/bloqueadas/no soportadas)
+    ============================================================ */
     .toolbar{
       display:flex;
       align-items:center;
@@ -241,7 +279,14 @@
     }
   </style>
 </head>
+
 <body>
+  <!-- ============================================================
+    ✅ UI (HTML)
+    - trips: lista de viajes
+    - toolbar: activar notificaciones
+    - events: timeline agrupado por día
+  ============================================================ -->
   <div class="container">
     <div class="header">
       <div style="font-size:28px;">✈️</div>
@@ -253,7 +298,6 @@
 
     <h2>Timeline</h2>
 
-    <!-- ✅ NUEVO (D4.2): activar notificaciones -->
     <div class="toolbar">
       <button id="enableNotifs" class="btn">🔔 Activar notificaciones</button>
       <span id="notifStatus" class="hint"></span>
@@ -263,12 +307,48 @@
   </div>
 
   <script>
+    /* ============================================================
+      ✅ CONEXIÓN A SUPABASE
+      - createClient() permite leer tablas "trips" y "events"
+      - OJO: este key es público (publishable). Está bien para lectura
+        si tu RLS lo permite. Nunca pongas un service_role aquí.
+    ============================================================ */
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    /* ============================================================
+      ✅ ESTADO DE APP
+      - activeTripId: qué viaje está seleccionado
+    ============================================================ */
     let activeTripId = null;
 
+    /* ============================================================
+      ✅ D4.3: CACHE + LOOP DE NOTIFICACIONES (sin recargar)
+      - LAST_EVENTS: guarda los eventos del viaje activo (última carga)
+      - NOTIF_TIMER: interval para reevaluar reglas cada minuto
+      - startNotifLoop(): inicia o reinicia el loop sin duplicarlo
+    ============================================================ */
+    let LAST_EVENTS = [];
+    let NOTIF_TIMER = null;
+
+    function startNotifLoop(){
+      // Evita tener 2 loops corriendo a la vez
+      if (NOTIF_TIMER) clearInterval(NOTIF_TIMER);
+
+      // Cada 60s reevaluamos reglas (2h, 30m, checkin 48h)
+      // IMPORTANTE: solo sirve si la pestaña sigue abierta.
+      NOTIF_TIMER = setInterval(() => {
+        if (LAST_EVENTS && LAST_EVENTS.length) {
+          runNotificationRules(LAST_EVENTS);
+        }
+      }, 60 * 1000);
+    }
+
+    /* ============================================================
+      ✅ UI POR TIPO DE EVENTO
+      - icon/color/bg/label define cómo se ve cada tipo
+    ============================================================ */
     const TYPE_UI = {
       flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
       hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
@@ -277,6 +357,12 @@
       other:    { icon:'📌', color:'var(--other)',    bg:'var(--otherBg)',    label:'Otro' }
     };
 
+    /* ============================================================
+      ✅ HELPERS DE FECHA/HORA
+      - toDate(): convierte timestamps de Supabase a Date()
+      - formatDay(): formatea fecha en español
+      - formatTime(): formatea hora HH:MM
+    ============================================================ */
     function toDate(value) {
       if (!value) return null;
       const clean = String(value).replace('Z','');
@@ -301,6 +387,11 @@
       return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     }
 
+    /* ============================================================
+      ✅ AGRUPAR EVENTOS POR DÍA
+      - groupByDay(): crea un Map donde la key es YYYY-MM-DD
+      - si no hay start_time => "sin-fecha"
+    ============================================================ */
     function groupByDay(events) {
       const map = new Map();
       for (const e of events) {
@@ -315,12 +406,21 @@
       return map;
     }
 
+    /* ============================================================
+      ✅ ESCAPAR TEXTO (seguridad / evitar HTML accidental)
+      - esc(): evita que un title/description con "<script>" se ejecute
+    ============================================================ */
     function esc(s){
       return String(s ?? '').replace(/[&<>"']/g, m => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
       }[m]));
     }
 
+    /* ============================================================
+      ✅ GOOGLE MAPS LINK
+      - Si metadata.coords existe => link directo a lat,lng
+      - Si no => usa "location" como búsqueda (Opción A)
+    ============================================================ */
     function mapsUrlFromMetaOrLocation(meta, location){
       const coords = meta?.coords;
       if (coords?.lat && coords?.lng) {
@@ -332,7 +432,11 @@
       return null;
     }
 
-    // ✅ NUEVO (D4.1): helpers de tiempo
+    /* ============================================================
+      ✅ HELPERS DE TIEMPO RELATIVO (para alertas)
+      - msUntil(): ms faltantes para el evento
+      - humanCountdown(): “en 2h 10m” o “hace 5m”
+    ============================================================ */
     function msUntil(date){
       if (!date) return null;
       return date.getTime() - Date.now();
@@ -350,7 +454,14 @@
       return sign < 0 ? `hace ${txt}` : `en ${txt}`;
     }
 
-    // ✅ NUEVO (D4.2): NOTIFICACIONES (Nivel 2)
+    /* ============================================================
+      ✅ NOTIFICACIONES DEL NAVEGADOR (D4.2)
+      - canNotify(): el navegador soporta Notification API?
+      - ensureNotifyPermission(): pide permiso
+      - fireNotification(): dispara notificación
+      - hasNotified()/markNotified(): evita duplicados
+      - runNotificationRules(): reglas (2h, 30m, check-in 48h)
+    ============================================================ */
     function canNotify() {
       return ("Notification" in window);
     }
@@ -381,13 +492,12 @@
       localStorage.setItem(notifiedKey(eventId, kind), "1");
     }
 
-    // ✅ NUEVO (D4.2): corre reglas de notificación por evento
     async function runNotificationRules(events){
-      // Si no hay soporte, no hagas nada
+      // Si el navegador no soporta, no hacemos nada
       if (!canNotify()) return;
 
-      const ok = (Notification.permission === "granted");
-      if (!ok) return; // solo notificamos si el usuario ya dio permisos
+      // Solo notificamos si el usuario ya dio permiso
+      if (Notification.permission !== "granted") return;
 
       const now = Date.now();
 
@@ -400,24 +510,25 @@
 
         const minsToStart = Math.round((start.getTime() - now) / 60000);
 
-        // (1) Recordatorio 2h antes (rango de 10 min para que no sea exactísimo)
+        // (1) Notificación ~2h antes (ventana 10 min)
         if (minsToStart <= 120 && minsToStart > 110 && !hasNotified(ev.id, "reminder_2h")) {
           fireNotification("🕑 Próximo evento (2h)", `${ev.title || 'Evento'} — en ~2 horas`);
           markNotified(ev.id, "reminder_2h");
         }
 
-        // (2) Recordatorio 30 min antes (rango de 10 min)
+        // (2) Notificación ~30 min antes (ventana 10 min)
         if (minsToStart <= 30 && minsToStart > 20 && !hasNotified(ev.id, "reminder_30m")) {
           fireNotification("⏰ Próximo evento (30m)", `${ev.title || 'Evento'} — en ~30 minutos`);
           markNotified(ev.id, "reminder_30m");
         }
 
-        // (3) Check-in: cuando se abre ventana de 48h (si hay checkin_url)
-        //     Rango de 20 min para engancharlo al refrescar.
+        // (3) Notificación cuando abre check-in (48h antes)
+        // Usa meta.checkin_available_window_hours si existe, si no 48 por default
         if (type === "flight" && meta.checkin_url) {
           const windowHours = Number(meta.checkin_available_window_hours || 48);
           const windowMins = windowHours * 60;
 
+          // Ventana 20 min para capturarlo con un loop de 1 min
           if (minsToStart <= windowMins && minsToStart > (windowMins - 20) && !hasNotified(ev.id, "checkin_open")) {
             fireNotification("✅ Check-in disponible", `${ev.title || 'Vuelo'} — ya puedes hacer check-in`);
             markNotified(ev.id, "checkin_open");
@@ -426,7 +537,11 @@
       }
     }
 
-    // ✅ NUEVO (D4.2): UI botón de permisos
+    /* ============================================================
+      ✅ UI: BOTÓN ACTIVAR NOTIFICACIONES
+      - paintNotifStatus(): actualiza texto/estado del botón
+      - onclick(): pide permiso y, si se activa, corre reglas “ya”
+    ============================================================ */
     const btnNotifs = document.getElementById("enableNotifs");
     const notifStatus = document.getElementById("notifStatus");
 
@@ -453,11 +568,21 @@
         notifStatus.textContent = "⚠️ No se pudieron activar (revisa permisos del navegador).";
       }
       paintNotifStatus();
+
+      // Si ya hay eventos cargados y ya hay permiso, dispara reglas ahora
+      if (Notification.permission === "granted" && LAST_EVENTS.length) {
+        runNotificationRules(LAST_EVENTS);
+      }
     };
 
     paintNotifStatus();
 
-    // ✅ NUEVO (D4.1): reglas de alertas en UI (incluye check-in a 48h)
+    /* ============================================================
+      ✅ ALERTAS EN UI (D4.1) — chips dentro de la tarjeta
+      - Check-in disponible si faltan <= 48h
+      - Aviso “Salir al aeropuerto” si faltan <= 3h
+      (Estas son VISUALES, no notificación)
+    ============================================================ */
     function renderAlerts(event){
       const type = (event.type || '').toLowerCase();
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
@@ -466,10 +591,10 @@
 
       const alerts = [];
 
-      // Regla 1: Check-in disponible (48 horas o menos) y con link
       if (type === 'flight' && meta.checkin_url) {
         const ms = msUntil(start);
         const hours = ms / (60 * 60 * 1000);
+
         if (hours <= 48 && hours > -24) {
           alerts.push(`<span class="alert-badge ok">✅ Check-in disponible</span>`);
         } else if (hours > 48) {
@@ -477,7 +602,6 @@
         }
       }
 
-      // Regla 2: Recordatorio salida (3 horas antes) para vuelos
       if (type === 'flight') {
         const ms = msUntil(start);
         const hours = ms / (60 * 60 * 1000);
@@ -489,10 +613,16 @@
       return alerts.length ? `<div class="alert-row">${alerts.join('')}</div>` : '';
     }
 
+    /* ============================================================
+      ✅ BADGES PRO (metadata)
+      - Pinta info de metadata por tipo (flight/hotel/activity/transfer)
+      - También agrega el badge de 📍 location con link a Google Maps
+    ============================================================ */
     function renderProBadges(event){
       const meta = event.metadata;
       const badges = [];
 
+      // Location + link “Mapa”
       if (event.location) {
         const url = mapsUrlFromMetaOrLocation(meta, event.location);
         badges.push(
@@ -503,6 +633,7 @@
         );
       }
 
+      // source como badge
       if (event.source) badges.push(`<span class="pro-badge"><strong>source:</strong> ${esc(event.source)}</span>`);
 
       if (!meta || typeof meta !== 'object') {
@@ -547,6 +678,7 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
+      // Si hay metadata pero no coincide con campos esperados
       if (Object.keys(meta).length && badges.length === 0) {
         badges.push(`<span class="pro-badge"><strong>meta:</strong> ${esc(Object.keys(meta).slice(0,4).join(', '))}${Object.keys(meta).length>4 ? '…' : ''}</span>`);
       }
@@ -554,6 +686,12 @@
       return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
     }
 
+    /* ============================================================
+      ✅ CARGAR VIAJES (TRIPS) DESDE SUPABASE
+      - Lee tabla "trips"
+      - Pinta tarjetas clickeables
+      - Auto-selecciona el primer viaje si no hay uno activo
+    ============================================================ */
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -578,15 +716,19 @@
         const div = document.createElement('div');
         div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
         div.innerHTML = `<strong>${esc(trip.title)}</strong>`;
+
+        // Al click: marca active y carga eventos de ese trip
         div.onclick = () => {
           activeTripId = trip.id;
           [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
           div.classList.add('active');
           loadEvents(trip.id);
         };
+
         tripsDiv.appendChild(div);
       });
 
+      // Auto-carga el primer trip
       if (!activeTripId) {
         activeTripId = data[0].id;
         const first = document.querySelector('.trip');
@@ -595,6 +737,13 @@
       }
     }
 
+    /* ============================================================
+      ✅ CARGAR EVENTOS (EVENTS) DE UN TRIP
+      - Lee tabla "events" filtrada por trip_id
+      - Orden: order_index (si existe) y luego start_time
+      - Guarda en LAST_EVENTS y arranca loop de notificaciones
+      - Agrupa por día y pinta el timeline completo
+    ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
       eventsDiv.classList.remove('muted');
@@ -617,7 +766,11 @@
         return;
       }
 
-      // ✅ NUEVO (D4.2): dispara notificaciones (si ya están activadas)
+      // ✅ D4.3: guardamos eventos en cache y arrancamos el loop (cada 60s)
+      LAST_EVENTS = data;
+      startNotifLoop();
+
+      // ✅ D4.2: al cargar, corremos reglas una vez (si ya hay permiso)
       await runNotificationRules(data);
 
       const grouped = groupByDay(data);
@@ -632,6 +785,7 @@
       for (const dayKey of dayKeys) {
         const list = grouped.get(dayKey) || [];
 
+        // Orden dentro del día: order_index primero; luego hora
         list.sort((a,b) => {
           const ai = (a.order_index ?? null);
           const bi = (b.order_index ?? null);
@@ -647,6 +801,7 @@
           return da - db;
         });
 
+        // Header del día
         const dayRow = document.createElement('div');
         dayRow.className = 'day-row';
 
@@ -667,6 +822,7 @@
         dayRow.appendChild(line);
         eventsDiv.appendChild(dayRow);
 
+        // Cards del día
         for (const event of list) {
           const type = (event.type || '').toLowerCase();
           const ui = TYPE_UI[type] || TYPE_UI.other;
@@ -674,8 +830,8 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          const alertsHtml = renderAlerts(event);
-          const proBadgesHtml = renderProBadges(event);
+          const alertsHtml = renderAlerts(event);     // Chips (UI)
+          const proBadgesHtml = renderProBadges(event); // Metadata
 
           const card = document.createElement('div');
           card.className = 'event';
@@ -704,6 +860,8 @@
       }
     }
 
+    // ✅ ARRANQUE INICIAL DE APP
+    // Carga trips, y por default se auto-carga el primer trip
     loadTrips();
   </script>
 </body>
