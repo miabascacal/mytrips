@@ -60,7 +60,17 @@
 
     function toDate(value) {
       if (!value) return null;
-      const d = new Date(value);
+    
+      // fuerza interpretación LOCAL (no UTC)
+      const parts = value.replace('Z','').split(/[-T:.]/);
+      const d = new Date(
+        parts[0],        // año
+        parts[1] - 1,    // mes
+        parts[2],        // día
+        parts[3] || 0,   // hora
+        parts[4] || 0    // minuto
+      );
+    
       if (isNaN(d.getTime())) return null;
       return d;
     }
