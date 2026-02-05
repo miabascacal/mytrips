@@ -7,7 +7,11 @@
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
     .trip { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: pointer; }
-    .event { margin-left: 20px; padding: 5px; border-left: 3px solid #007bff; }
+    .trip:hover { background:#f7f7f7; }
+    .event { margin-left: 20px; padding: 10px 10px; border-left: 3px solid #007bff; margin-bottom: 8px; border-radius: 6px; background: #fafafa; }
+    .event-title { font-weight: 600; margin-bottom: 4px; }
+    .event-meta { font-size: 12px; opacity: .75; }
+    .muted { opacity:.75; font-size: 13px; }
   </style>
 </head>
 <body>
@@ -16,7 +20,7 @@
   <div id="trips"></div>
 
   <h2>Timeline</h2>
-  <div id="events"></div>
+  <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
 
   <script>
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
@@ -24,6 +28,21 @@
 
     // ✅ Cliente Supabase (NO usar "supabase" como nombre de variable)
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // ✅ Mapeo de iconos por tipo (según tu constraint)
+    const TYPE_ICONS = {
+      flight: '✈️',
+      hotel: '🏨',
+      activity: '🎟️',
+      transfer: '🚗'
+    };
+
+    function formatDateTime(value) {
+      if (!value) return 'Sin hora';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return 'Sin hora';
+      return d.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+    }
 
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
@@ -55,24 +74,38 @@
     }
 
     async function loadEvents(tripId) {
+      const eventsDiv = document.getElementById('events');
+      eventsDiv.classList.remove('muted');
+      eventsDiv.innerHTML = 'Cargando timeline...';
+
       const { data, error } = await sb
         .from('events')
         .select('*')
         .eq('trip_id', tripId)
         .order('start_time');
 
-      const eventsDiv = document.getElementById('events');
-      eventsDiv.innerHTML = '';
-
       if (error) {
         eventsDiv.innerText = 'Error cargando eventos: ' + error.message;
         return;
       }
 
+      if (!data || data.length === 0) {
+        eventsDiv.innerHTML = '<span class="muted">Este viaje aún no tiene eventos.</span>';
+        return;
+      }
+
+      eventsDiv.innerHTML = '';
       (data || []).forEach(event => {
         const div = document.createElement('div');
         div.className = 'event';
-        div.innerHTML = `<strong>${event.type}</strong>: ${event.title}`;
+
+        const icon = TYPE_ICONS[event.type] || '📌';
+        const when = formatDateTime(event.start_time);
+
+        div.innerHTML = `
+          <div class="event-title">${icon} ${when} — ${event.title}</div>
+          <div class="event-meta">tipo: ${event.type}</div>
+        `;
         eventsDiv.appendChild(div);
       });
     }
