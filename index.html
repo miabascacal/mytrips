@@ -32,11 +32,21 @@
       --transfer:#f59e0b;
       --other:#64748b;
 
+      /* ✅ NUEVOS: tipos extra en BD */
+      --cruise:#0ea5e9;     /* crucero */
+      --car:#334155;        /* automovil */
+      --bus:#9333ea;        /* autobus */
+
       --flightBg: rgba(37,99,235,.08);
       --hotelBg: rgba(124,58,237,.08);
       --activityBg: rgba(22,163,74,.08);
       --transferBg: rgba(245,158,11,.10);
       --otherBg: rgba(100,116,139,.08);
+
+      /* ✅ NUEVOS: fondos */
+      --cruiseBg: rgba(14,165,233,.10);
+      --carBg: rgba(51,65,85,.08);
+      --busBg: rgba(147,51,234,.10);
     }
 
     /* ============================================================
@@ -348,12 +358,19 @@
     /* ============================================================
       ✅ UI POR TIPO DE EVENTO
       - icon/color/bg/label define cómo se ve cada tipo
+      ✅ NUEVO: crucero / automovil / autobus
     ============================================================ */
     const TYPE_UI = {
       flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
       hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
       activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
       transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
+
+      /* ✅ NUEVOS */
+      crucero:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
+      automovil: { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
+      autobus:   { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
+
       other:    { icon:'📌', color:'var(--other)',    bg:'var(--otherBg)',    label:'Otro' }
     };
 
@@ -522,8 +539,7 @@
           markNotified(ev.id, "reminder_30m");
         }
 
-        // (3) Notificación cuando abre check-in (48h antes)
-        // Usa meta.checkin_available_window_hours si existe, si no 48 por default
+        // (3) Notificación cuando abre check-in (ventana configurable, default 48h)
         if (type === "flight" && meta.checkin_url) {
           const windowHours = Number(meta.checkin_available_window_hours || 48);
           const windowMins = windowHours * 60;
@@ -579,7 +595,7 @@
 
     /* ============================================================
       ✅ ALERTAS EN UI (D4.1) — chips dentro de la tarjeta
-      - Check-in disponible si faltan <= 48h
+      - Check-in disponible si faltan <= ventana (default 48h)
       - Aviso “Salir al aeropuerto” si faltan <= 3h
       (Estas son VISUALES, no notificación)
     ============================================================ */
@@ -593,12 +609,14 @@
 
       if (type === 'flight' && meta.checkin_url) {
         const ms = msUntil(start);
-        const hours = ms / (60 * 60 * 1000);
+        const hoursToStart = ms / (60 * 60 * 1000);
+        const windowHours = Number(meta.checkin_available_window_hours || 48);
 
-        if (hours <= 48 && hours > -24) {
+        if (hoursToStart <= windowHours && hoursToStart > -24) {
           alerts.push(`<span class="alert-badge ok">✅ Check-in disponible</span>`);
-        } else if (hours > 48) {
-          alerts.push(`<span class="alert-badge warn">🕒 Check-in ${humanCountdown(ms - (48*60*60*1000))}</span>`);
+        } else if (hoursToStart > windowHours) {
+          const msToOpen = ms - (windowHours*60*60*1000);
+          alerts.push(`<span class="alert-badge warn">🕒 Check-in ${humanCountdown(msToOpen)}</span>`);
         }
       }
 
@@ -617,6 +635,9 @@
       ✅ BADGES PRO (metadata)
       - Pinta info de metadata por tipo (flight/hotel/activity/transfer)
       - También agrega el badge de 📍 location con link a Google Maps
+      ✅ NUEVO:
+        - automovil/autobus usan pickup/dropoff/company igual que transfer
+        - crucero muestra operator/cabin/reference si existen
     ============================================================ */
     function renderProBadges(event){
       const meta = event.metadata;
@@ -671,10 +692,18 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      if (type === 'transfer') {
+      // ✅ transfer + automovil + autobus comparten lógica de traslado
+      if (type === 'transfer' || type === 'automovil' || type === 'autobus') {
         if (meta.pickup) badges.push(`<span class="pro-badge"><strong>Pickup:</strong> ${esc(meta.pickup)}</span>`);
         if (meta.dropoff) badges.push(`<span class="pro-badge"><strong>Dropoff:</strong> ${esc(meta.dropoff)}</span>`);
         if (meta.company) badges.push(`<span class="pro-badge"><strong>Proveedor:</strong> ${esc(meta.company)}</span>`);
+        if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
+      }
+
+      // ✅ crucero: campos típicos (si los guardas en metadata)
+      if (type === 'crucero') {
+        if (meta.operator) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.operator)}</span>`);
+        if (meta.cabin) badges.push(`<span class="pro-badge"><strong>Cabina:</strong> ${esc(meta.cabin)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
@@ -830,7 +859,7 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          const alertsHtml = renderAlerts(event);     // Chips (UI)
+          const alertsHtml = renderAlerts(event);       // Chips (UI)
           const proBadgesHtml = renderProBadges(event); // Metadata
 
           const card = document.createElement('div');
@@ -859,6 +888,17 @@
         }
       }
     }
+
+    /* ============================================================
+      ✅ AUTO-REFRESH (D4.4)
+      - Refresca eventos cada 2 minutos para:
+        - traer cambios de BD (si agregas/actualizas eventos)
+        - y disparar reglas sin recargar la página manualmente
+      - Nota: tus notificaciones igual dependen de que la pestaña esté abierta.
+    ============================================================ */
+    setInterval(() => {
+      if (activeTripId) loadEvents(activeTripId);
+    }, 2 * 60 * 1000);
 
     // ✅ ARRANQUE INICIAL DE APP
     // Carga trips, y por default se auto-carga el primer trip
