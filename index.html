@@ -22,7 +22,7 @@
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
 
-    const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     async function loadTrips() {
       const { data, error } = await supabase.from('trips').select('*');
