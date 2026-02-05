@@ -2,75 +2,224 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MyTrips</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 30px; }
-    .trip { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: pointer; border-radius: 6px; }
-    .trip:hover { background:#f7f7f7; }
+    :root{
+      --bg:#ffffff;
+      --text:#111;
+      --muted:#6b7280;
+      --border:#e5e7eb;
+      --card:#ffffff;
+      --shadow: 0 8px 24px rgba(0,0,0,0.06);
 
-    .muted { opacity:.75; font-size: 13px; }
+      --flight:#2563eb;
+      --hotel:#7c3aed;
+      --activity:#16a34a;
+      --transfer:#f59e0b;
+      --other:#64748b;
 
-    .day {
-      margin-left: 10px;
-      margin-top: 16px;
-      padding: 10px 12px;
-      background: #f2f4f7;
+      --flightBg: rgba(37,99,235,.08);
+      --hotelBg: rgba(124,58,237,.08);
+      --activityBg: rgba(22,163,74,.08);
+      --transferBg: rgba(245,158,11,.10);
+      --otherBg: rgba(100,116,139,.08);
+    }
+
+    body{
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .container{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 26px;
+    }
+
+    .header{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom: 16px;
+    }
+
+    h1{
+      margin:0;
+      font-size: 34px;
+      letter-spacing: -0.4px;
+    }
+
+    h2{
+      margin: 18px 0 10px;
+      font-size: 22px;
+    }
+
+    .muted { color: var(--muted); font-size: 13px; }
+
+    /* Trips */
+    .trip{
+      border: 1px solid var(--border);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
       border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+      transition: transform .05s ease-in-out;
+    }
+    .trip:hover{ transform: translateY(-1px); }
+    .trip.active{
+      border-color: #c7d2fe;
+      background: #f5f7ff;
+    }
+
+    /* Day header */
+    .day-row{
+      margin-top: 18px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .day{
+      padding: 6px 10px;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 999px;
       font-weight: 700;
       display: inline-block;
+      font-size: 13px;
+    }
+    .day-line{ height: 1px; flex:1; background: var(--border); }
+
+    /* Events */
+    .event{
+      display:flex;
+      gap: 12px;
+      align-items:flex-start;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--card);
+      padding: 12px 12px;
+      margin: 10px 0;
+      box-shadow: var(--shadow);
     }
 
-    .event {
-      margin-left: 20px;
-      padding: 10px 12px;
-      border-left: 3px solid #007bff;
-      margin-bottom: 8px;
-      border-radius: 8px;
-      background: #fafafa;
+    .icon{
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 18px;
+      flex: 0 0 auto;
+      margin-top: 2px;
     }
-    .event-title { font-weight: 600; margin-bottom: 4px; }
-    .event-meta { font-size: 12px; opacity: .75; }
-    .event-time { font-weight: 700; }
+
+    .event-body{ flex:1; min-width: 0; }
+
+    .event-top{
+      display:flex;
+      justify-content: space-between;
+      align-items:baseline;
+      gap: 12px;
+    }
+
+    .event-title{
+      font-weight: 800;
+      font-size: 16px;
+      margin: 0;
+      overflow:hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .event-time{
+      font-weight: 800;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .event-desc{
+      margin-top: 6px;
+      font-size: 13px;
+      color:#333;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+
+    .event-meta{
+      margin-top: 8px;
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .badge{
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .empty{
+      padding: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-top: 10px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
-  <h1>✈️ MyTrips</h1>
+  <div class="container">
+    <div class="header">
+      <div style="font-size:28px;">✈️</div>
+      <h1>MyTrips</h1>
+    </div>
 
-  <h2>Mis viajes</h2>
-  <div id="trips"></div>
+    <h2>Mis viajes</h2>
+    <div id="trips" class="muted">Cargando viajes...</div>
 
-  <h2>Timeline</h2>
-  <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
+    <h2>Timeline</h2>
+    <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
+  </div>
 
   <script>
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
-
-    // ✅ Cliente Supabase
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // ✅ Iconos por tipo (según constraint)
-    const TYPE_ICONS = {
-      flight: '✈️',
-      hotel: '🏨',
-      activity: '🎟️',
-      transfer: '🚗'
+    let activeTripId = null;
+
+    const TYPE_UI = {
+      flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
+      hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
+      activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
+      transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
+      other:    { icon:'📌', color:'var(--other)',    bg:'var(--otherBg)',    label:'Otro' }
     };
 
     function toDate(value) {
       if (!value) return null;
-    
-      // fuerza interpretación LOCAL (no UTC)
-      const parts = value.replace('Z','').split(/[-T:.]/);
+      const clean = String(value).replace('Z','');
+      const parts = clean.split(/[-T:.]/);
+
       const d = new Date(
-        parts[0],        // año
-        parts[1] - 1,    // mes
-        parts[2],        // día
-        parts[3] || 0,   // hora
-        parts[4] || 0    // minuto
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2]),
+        Number(parts[3] || 0),
+        Number(parts[4] || 0)
       );
-    
       if (isNaN(d.getTime())) return null;
       return d;
     }
@@ -87,12 +236,10 @@
       const map = new Map();
       for (const e of events) {
         const d = toDate(e.start_time);
-    
-        // ✅ clave por FECHA LOCAL (no UTC)
         const key = d
           ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
           : 'sin-fecha';
-    
+
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(e);
       }
@@ -101,9 +248,10 @@
 
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
+      tripsDiv.classList.add('muted');
       tripsDiv.innerHTML = 'Cargando viajes...';
 
-      const { data, error } = await sb.from('trips').select('*');
+      const { data, error } = await sb.from('trips').select('*').order('start_date', { ascending: true });
 
       if (error) {
         tripsDiv.innerText = 'Error cargando viajes: ' + error.message;
@@ -111,18 +259,33 @@
       }
 
       if (!data || data.length === 0) {
-        tripsDiv.innerText = 'No hay viajes aún (la consulta regresó 0).';
+        tripsDiv.innerHTML = `<div class="empty">No hay viajes aún.</div>`;
         return;
       }
 
+      tripsDiv.classList.remove('muted');
       tripsDiv.innerHTML = '';
+
       data.forEach(trip => {
         const div = document.createElement('div');
-        div.className = 'trip';
-        div.innerText = trip.title;
-        div.onclick = () => loadEvents(trip.id);
+        div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
+        div.innerHTML = `<strong>${trip.title}</strong>`;
+        div.onclick = () => {
+          activeTripId = trip.id;
+          [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
+          div.classList.add('active');
+          loadEvents(trip.id);
+        };
         tripsDiv.appendChild(div);
       });
+
+      // Auto-cargar el primero si no hay seleccionado
+      if (!activeTripId) {
+        activeTripId = data[0].id;
+        const first = document.querySelector('.trip');
+        if (first) first.classList.add('active');
+        loadEvents(activeTripId);
+      }
     }
 
     async function loadEvents(tripId) {
@@ -134,7 +297,7 @@
         .from('events')
         .select('*')
         .eq('trip_id', tripId)
-        .order('start_time');
+        .order('start_time', { ascending: true });
 
       if (error) {
         eventsDiv.innerText = 'Error cargando eventos: ' + error.message;
@@ -142,14 +305,11 @@
       }
 
       if (!data || data.length === 0) {
-        eventsDiv.innerHTML = '<span class="muted">Este viaje aún no tiene eventos.</span>';
+        eventsDiv.innerHTML = `<div class="empty">Este viaje aún no tiene eventos.</div>`;
         return;
       }
 
-      // ✅ Agrupar por día
       const grouped = groupByDay(data);
-
-      // ✅ Ordenar días (sin-fecha al final)
       const dayKeys = Array.from(grouped.keys()).sort((a,b) => {
         if (a === 'sin-fecha') return 1;
         if (b === 'sin-fecha') return -1;
@@ -159,9 +319,9 @@
       eventsDiv.innerHTML = '';
 
       for (const dayKey of dayKeys) {
-        const list = grouped.get(dayKey);
+        const list = grouped.get(dayKey) || [];
 
-        // ordenar eventos dentro del día por hora
+        // Ordenar dentro del día
         list.sort((a,b) => {
           const da = toDate(a.start_time);
           const db = toDate(b.start_time);
@@ -172,35 +332,55 @@
         });
 
         // Header del día
-        const dayHeader = document.createElement('div');
-        dayHeader.className = 'day';
+        const dayRow = document.createElement('div');
+        dayRow.className = 'day-row';
+
+        const pill = document.createElement('div');
+        pill.className = 'day';
 
         if (dayKey === 'sin-fecha') {
-          dayHeader.textContent = 'Sin fecha';
+          pill.textContent = 'Sin fecha';
         } else {
           const parts = dayKey.split('-');
           const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-          dayHeader.textContent = formatDay(d);
+          pill.textContent = formatDay(d);
         }
 
-        eventsDiv.appendChild(dayHeader);
+        dayRow.appendChild(pill);
+        const line = document.createElement('div');
+        line.className = 'day-line';
+        dayRow.appendChild(line);
+        eventsDiv.appendChild(dayRow);
 
         // Eventos
         for (const event of list) {
-          const div = document.createElement('div');
-          div.className = 'event';
+          const type = (event.type || '').toLowerCase();
+          const ui = TYPE_UI[type] || TYPE_UI.other;
 
-          const icon = TYPE_ICONS[event.type] || '📌';
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          div.innerHTML = `
-            <div class="event-title">
-              ${icon} <span class="event-time">${time}</span> — ${event.title}
+          const card = document.createElement('div');
+          card.className = 'event';
+
+          card.innerHTML = `
+            <div class="icon" style="background:${ui.bg}; border:1px solid var(--border);">
+              <span style="color:${ui.color}">${ui.icon}</span>
             </div>
-            <div class="event-meta">tipo: ${event.type}</div>
+            <div class="event-body">
+              <div class="event-top">
+                <p class="event-title">${event.title || '(sin título)'}</p>
+                <div class="event-time">${time}</div>
+              </div>
+              ${event.description ? `<div class="event-desc">${event.description}</div>` : ``}
+              <div class="event-meta">
+                <span class="badge">${ui.label}</span>
+                <span class="badge">tipo: ${event.type || 'unknown'}</span>
+              </div>
+            </div>
           `;
-          eventsDiv.appendChild(div);
+
+          eventsDiv.appendChild(card);
         }
       }
     }
