@@ -214,6 +214,31 @@
     }
     .pro-badge strong{ color:#111; font-weight: 700; }
     .pro-badge a{ color: inherit; text-decoration: underline; }
+
+    /* ✅ NUEVO (D4.2): barra de notificaciones */
+    .toolbar{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin: 6px 0 12px;
+      flex-wrap: wrap;
+    }
+    .btn{
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .btn:disabled{
+      opacity: .6;
+      cursor: not-allowed;
+    }
+    .hint{
+      font-size: 12px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -227,6 +252,13 @@
     <div id="trips" class="muted">Cargando viajes...</div>
 
     <h2>Timeline</h2>
+
+    <!-- ✅ NUEVO (D4.2): activar notificaciones -->
+    <div class="toolbar">
+      <button id="enableNotifs" class="btn">🔔 Activar notificaciones</button>
+      <span id="notifStatus" class="hint"></span>
+    </div>
+
     <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
   </div>
 
@@ -318,7 +350,114 @@
       return sign < 0 ? `hace ${txt}` : `en ${txt}`;
     }
 
-    // ✅ NUEVO (D4.1): reglas de alertas (incluye check-in a 48h)
+    // ✅ NUEVO (D4.2): NOTIFICACIONES (Nivel 2)
+    function canNotify() {
+      return ("Notification" in window);
+    }
+
+    async function ensureNotifyPermission() {
+      if (!canNotify()) return false;
+      if (Notification.permission === "granted") return true;
+      if (Notification.permission === "denied") return false;
+      const res = await Notification.requestPermission();
+      return res === "granted";
+    }
+
+    function fireNotification(title, body) {
+      try {
+        new Notification(title, { body });
+      } catch (e) {
+        console.warn("Notification error:", e);
+      }
+    }
+
+    function notifiedKey(eventId, kind) {
+      return `notified:${kind}:${eventId}`;
+    }
+    function hasNotified(eventId, kind) {
+      return localStorage.getItem(notifiedKey(eventId, kind)) === "1";
+    }
+    function markNotified(eventId, kind) {
+      localStorage.setItem(notifiedKey(eventId, kind), "1");
+    }
+
+    // ✅ NUEVO (D4.2): corre reglas de notificación por evento
+    async function runNotificationRules(events){
+      // Si no hay soporte, no hagas nada
+      if (!canNotify()) return;
+
+      const ok = (Notification.permission === "granted");
+      if (!ok) return; // solo notificamos si el usuario ya dio permisos
+
+      const now = Date.now();
+
+      for (const ev of events) {
+        const start = toDate(ev.start_time);
+        if (!start) continue;
+
+        const meta = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
+        const type = (ev.type || '').toLowerCase();
+
+        const minsToStart = Math.round((start.getTime() - now) / 60000);
+
+        // (1) Recordatorio 2h antes (rango de 10 min para que no sea exactísimo)
+        if (minsToStart <= 120 && minsToStart > 110 && !hasNotified(ev.id, "reminder_2h")) {
+          fireNotification("🕑 Próximo evento (2h)", `${ev.title || 'Evento'} — en ~2 horas`);
+          markNotified(ev.id, "reminder_2h");
+        }
+
+        // (2) Recordatorio 30 min antes (rango de 10 min)
+        if (minsToStart <= 30 && minsToStart > 20 && !hasNotified(ev.id, "reminder_30m")) {
+          fireNotification("⏰ Próximo evento (30m)", `${ev.title || 'Evento'} — en ~30 minutos`);
+          markNotified(ev.id, "reminder_30m");
+        }
+
+        // (3) Check-in: cuando se abre ventana de 48h (si hay checkin_url)
+        //     Rango de 20 min para engancharlo al refrescar.
+        if (type === "flight" && meta.checkin_url) {
+          const windowHours = Number(meta.checkin_available_window_hours || 48);
+          const windowMins = windowHours * 60;
+
+          if (minsToStart <= windowMins && minsToStart > (windowMins - 20) && !hasNotified(ev.id, "checkin_open")) {
+            fireNotification("✅ Check-in disponible", `${ev.title || 'Vuelo'} — ya puedes hacer check-in`);
+            markNotified(ev.id, "checkin_open");
+          }
+        }
+      }
+    }
+
+    // ✅ NUEVO (D4.2): UI botón de permisos
+    const btnNotifs = document.getElementById("enableNotifs");
+    const notifStatus = document.getElementById("notifStatus");
+
+    function paintNotifStatus(){
+      if (!canNotify()){
+        notifStatus.textContent = "Tu navegador no soporta notificaciones.";
+        btnNotifs.disabled = true;
+        return;
+      }
+      const p = Notification.permission;
+      if (p === "granted"){
+        notifStatus.textContent = "✅ Notificaciones activadas (deja la pestaña abierta).";
+        btnNotifs.textContent = "✅ Notificaciones activadas";
+      } else if (p === "denied"){
+        notifStatus.textContent = "⚠️ Bloqueadas en el navegador (actívalas en ajustes del sitio).";
+      } else {
+        notifStatus.textContent = "Actívalas para recibir avisos (2h, 30m, check-in 48h).";
+      }
+    }
+
+    btnNotifs.onclick = async () => {
+      const ok = await ensureNotifyPermission();
+      if (!ok){
+        notifStatus.textContent = "⚠️ No se pudieron activar (revisa permisos del navegador).";
+      }
+      paintNotifStatus();
+    };
+
+    paintNotifStatus();
+
+    // ✅ NUEVO (D4.1): reglas de alertas en UI (incluye check-in a 48h)
     function renderAlerts(event){
       const type = (event.type || '').toLowerCase();
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
@@ -331,10 +470,9 @@
       if (type === 'flight' && meta.checkin_url) {
         const ms = msUntil(start);
         const hours = ms / (60 * 60 * 1000);
-        if (hours <= 48 && hours > -24) { // lo dejamos visible hasta 24h después por si acaso
+        if (hours <= 48 && hours > -24) {
           alerts.push(`<span class="alert-badge ok">✅ Check-in disponible</span>`);
         } else if (hours > 48) {
-          // opcional: mostrar "abre en..." (lo dejo activado porque ayuda)
           alerts.push(`<span class="alert-badge warn">🕒 Check-in ${humanCountdown(ms - (48*60*60*1000))}</span>`);
         }
       }
@@ -479,6 +617,9 @@
         return;
       }
 
+      // ✅ NUEVO (D4.2): dispara notificaciones (si ya están activadas)
+      await runNotificationRules(data);
+
       const grouped = groupByDay(data);
       const dayKeys = Array.from(grouped.keys()).sort((a,b) => {
         if (a === 'sin-fecha') return 1;
@@ -533,7 +674,7 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          const alertsHtml = renderAlerts(event);     // ✅ D4.1
+          const alertsHtml = renderAlerts(event);
           const proBadgesHtml = renderProBadges(event);
 
           const card = document.createElement('div');
