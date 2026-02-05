@@ -145,6 +145,25 @@
       white-space: nowrap;
     }
 
+    /* ✅ NUEVO (D4.1): alertas */
+    .alert-row{
+      margin-top: 8px;
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+    }
+    .alert-badge{
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .alert-badge.warn{ background: rgba(245,158,11,.12); }
+    .alert-badge.ok{ background: rgba(22,163,74,.12); }
+    .alert-badge.danger{ background: rgba(239,68,68,.10); }
+
     .event-desc{
       margin-top: 6px;
       font-size: 13px;
@@ -178,7 +197,7 @@
       color: var(--muted);
     }
 
-    /* ✅ NUEVO: badges "PRO" desde metadata */
+    /* badges "PRO" desde metadata */
     .pro-row{
       margin-top: 8px;
       display:flex;
@@ -264,14 +283,12 @@
       return map;
     }
 
-    // ✅ helper para escapar texto (evitar HTML accidental)
     function esc(s){
       return String(s ?? '').replace(/[&<>"']/g, m => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
       }[m]));
     }
 
-    // ✅ NUEVO (D2): genera URL de mapa por coords (si existen) o por location
     function mapsUrlFromMetaOrLocation(meta, location){
       const coords = meta?.coords;
       if (coords?.lat && coords?.lng) {
@@ -283,12 +300,61 @@
       return null;
     }
 
-    // ✅ NUEVO: renderiza "datos PRO" desde metadata (según type)
+    // ✅ NUEVO (D4.1): helpers de tiempo
+    function msUntil(date){
+      if (!date) return null;
+      return date.getTime() - Date.now();
+    }
+
+    function humanCountdown(ms){
+      if (ms === null) return null;
+      const totalMin = Math.ceil(ms / (60 * 1000));
+      const sign = totalMin < 0 ? -1 : 1;
+      const absMin = Math.abs(totalMin);
+
+      const h = Math.floor(absMin / 60);
+      const m = absMin % 60;
+      const txt = h > 0 ? `${h}h ${m}m` : `${m}m`;
+      return sign < 0 ? `hace ${txt}` : `en ${txt}`;
+    }
+
+    // ✅ NUEVO (D4.1): reglas de alertas (incluye check-in a 48h)
+    function renderAlerts(event){
+      const type = (event.type || '').toLowerCase();
+      const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
+      const start = toDate(event.start_time);
+      if (!start) return '';
+
+      const alerts = [];
+
+      // Regla 1: Check-in disponible (48 horas o menos) y con link
+      if (type === 'flight' && meta.checkin_url) {
+        const ms = msUntil(start);
+        const hours = ms / (60 * 60 * 1000);
+        if (hours <= 48 && hours > -24) { // lo dejamos visible hasta 24h después por si acaso
+          alerts.push(`<span class="alert-badge ok">✅ Check-in disponible</span>`);
+        } else if (hours > 48) {
+          // opcional: mostrar "abre en..." (lo dejo activado porque ayuda)
+          alerts.push(`<span class="alert-badge warn">🕒 Check-in ${humanCountdown(ms - (48*60*60*1000))}</span>`);
+        }
+      }
+
+      // Regla 2: Recordatorio salida (3 horas antes) para vuelos
+      if (type === 'flight') {
+        const ms = msUntil(start);
+        const hours = ms / (60 * 60 * 1000);
+        if (hours <= 3 && hours > 0) {
+          alerts.push(`<span class="alert-badge danger">⏰ Salir al aeropuerto ${humanCountdown(ms)}</span>`);
+        }
+      }
+
+      return alerts.length ? `<div class="alert-row">${alerts.join('')}</div>` : '';
+    }
+
     function renderProBadges(event){
       const meta = event.metadata;
       const badges = [];
 
-      // ✅ D1/D2: location como badge + link a Google Maps (coords o search)
       if (event.location) {
         const url = mapsUrlFromMetaOrLocation(meta, event.location);
         badges.push(
@@ -299,7 +365,6 @@
         );
       }
 
-      // source como PRO extra (aunque no esté en metadata)
       if (event.source) badges.push(`<span class="pro-badge"><strong>source:</strong> ${esc(event.source)}</span>`);
 
       if (!meta || typeof meta !== 'object') {
@@ -317,7 +382,6 @@
         }
         if (meta.pnr) badges.push(`<span class="pro-badge"><strong>PNR:</strong> ${esc(meta.pnr)}</span>`);
 
-        // ✅ D3: links útiles (opcional)
         if (meta.checkin_url) badges.push(`<span class="pro-badge"><strong>Check-in:</strong> <a href="${esc(meta.checkin_url)}" target="_blank" rel="noopener">abrir</a></span>`);
         if (meta.booking_url) badges.push(`<span class="pro-badge"><strong>Reserva:</strong> <a href="${esc(meta.booking_url)}" target="_blank" rel="noopener">abrir</a></span>`);
       }
@@ -345,7 +409,6 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // Si hay metadata pero no coincide con campos esperados, muestra 1 badge debug
       if (Object.keys(meta).length && badges.length === 0) {
         badges.push(`<span class="pro-badge"><strong>meta:</strong> ${esc(Object.keys(meta).slice(0,4).join(', '))}${Object.keys(meta).length>4 ? '…' : ''}</span>`);
       }
@@ -386,7 +449,6 @@
         tripsDiv.appendChild(div);
       });
 
-      // Auto-cargar el primero si no hay seleccionado
       if (!activeTripId) {
         activeTripId = data[0].id;
         const first = document.querySelector('.trip');
@@ -404,7 +466,6 @@
         .from('events')
         .select('*')
         .eq('trip_id', tripId)
-        // ✅ PRO: orden “humano” si usas order_index; si no, igual funciona con start_time
         .order('order_index', { ascending: true, nullsFirst: false })
         .order('start_time', { ascending: true });
 
@@ -430,7 +491,6 @@
       for (const dayKey of dayKeys) {
         const list = grouped.get(dayKey) || [];
 
-        // Ordenar dentro del día: primero order_index si existe, luego por hora
         list.sort((a,b) => {
           const ai = (a.order_index ?? null);
           const bi = (b.order_index ?? null);
@@ -446,7 +506,6 @@
           return da - db;
         });
 
-        // Header del día
         const dayRow = document.createElement('div');
         dayRow.className = 'day-row';
 
@@ -467,7 +526,6 @@
         dayRow.appendChild(line);
         eventsDiv.appendChild(dayRow);
 
-        // Eventos
         for (const event of list) {
           const type = (event.type || '').toLowerCase();
           const ui = TYPE_UI[type] || TYPE_UI.other;
@@ -475,7 +533,7 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          // ✅ NUEVO: badges PRO (incluye Mapa + links)
+          const alertsHtml = renderAlerts(event);     // ✅ D4.1
           const proBadgesHtml = renderProBadges(event);
 
           const card = document.createElement('div');
@@ -491,6 +549,7 @@
                 <div class="event-time">${esc(time)}</div>
               </div>
               ${event.description ? `<div class="event-desc">${esc(event.description)}</div>` : ``}
+              ${alertsHtml}
               ${proBadgesHtml}
               <div class="event-meta">
                 <span class="badge">${ui.label}</span>
