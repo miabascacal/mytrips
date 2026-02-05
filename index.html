@@ -264,11 +264,23 @@
       return map;
     }
 
-    // ✅ NUEVO: helper para escapar texto (evitar HTML accidental)
+    // ✅ helper para escapar texto (evitar HTML accidental)
     function esc(s){
       return String(s ?? '').replace(/[&<>"']/g, m => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
       }[m]));
+    }
+
+    // ✅ NUEVO (D2): genera URL de mapa por coords (si existen) o por location
+    function mapsUrlFromMetaOrLocation(meta, location){
+      const coords = meta?.coords;
+      if (coords?.lat && coords?.lng) {
+        return `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
+      }
+      if (location) {
+        return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(String(location))}`;
+      }
+      return null;
     }
 
     // ✅ NUEVO: renderiza "datos PRO" desde metadata (según type)
@@ -276,8 +288,18 @@
       const meta = event.metadata;
       const badges = [];
 
-      // location/source como PRO extra (aunque no estén en metadata)
-      if (event.location) badges.push(`<span class="pro-badge"><strong>📍</strong> ${esc(event.location)}</span>`);
+      // ✅ D1/D2: location como badge + link a Google Maps (coords o search)
+      if (event.location) {
+        const url = mapsUrlFromMetaOrLocation(meta, event.location);
+        badges.push(
+          `<span class="pro-badge">
+            <strong>📍</strong> ${esc(event.location)}
+            ${url ? `&nbsp;·&nbsp;<a href="${url}" target="_blank" rel="noopener">Mapa</a>` : ``}
+          </span>`
+        );
+      }
+
+      // source como PRO extra (aunque no esté en metadata)
       if (event.source) badges.push(`<span class="pro-badge"><strong>source:</strong> ${esc(event.source)}</span>`);
 
       if (!meta || typeof meta !== 'object') {
@@ -294,6 +316,10 @@
           badges.push(`<span class="pro-badge"><strong>Docs:</strong> ${esc(meta.documents.join(', '))}</span>`);
         }
         if (meta.pnr) badges.push(`<span class="pro-badge"><strong>PNR:</strong> ${esc(meta.pnr)}</span>`);
+
+        // ✅ D3: links útiles (opcional)
+        if (meta.checkin_url) badges.push(`<span class="pro-badge"><strong>Check-in:</strong> <a href="${esc(meta.checkin_url)}" target="_blank" rel="noopener">abrir</a></span>`);
+        if (meta.booking_url) badges.push(`<span class="pro-badge"><strong>Reserva:</strong> <a href="${esc(meta.booking_url)}" target="_blank" rel="noopener">abrir</a></span>`);
       }
 
       if (type === 'hotel') {
@@ -302,6 +328,7 @@
         if (meta.check_out) badges.push(`<span class="pro-badge"><strong>Check-out:</strong> ${esc(meta.check_out)}</span>`);
         if (meta.address) badges.push(`<span class="pro-badge"><strong>Dirección:</strong> ${esc(meta.address)}</span>`);
         if (meta.reservation) badges.push(`<span class="pro-badge"><strong>Reserva:</strong> ${esc(meta.reservation)}</span>`);
+        if (meta.booking_url) badges.push(`<span class="pro-badge"><strong>Reserva:</strong> <a href="${esc(meta.booking_url)}" target="_blank" rel="noopener">abrir</a></span>`);
       }
 
       if (type === 'activity') {
@@ -349,7 +376,7 @@
       data.forEach(trip => {
         const div = document.createElement('div');
         div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
-        div.innerHTML = `<strong>${trip.title}</strong>`;
+        div.innerHTML = `<strong>${esc(trip.title)}</strong>`;
         div.onclick = () => {
           activeTripId = trip.id;
           [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
@@ -448,7 +475,7 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          // ✅ NUEVO: si no hay description, pero sí metadata, se verá en PRO badges
+          // ✅ NUEVO: badges PRO (incluye Mapa + links)
           const proBadgesHtml = renderProBadges(event);
 
           const card = document.createElement('div');
