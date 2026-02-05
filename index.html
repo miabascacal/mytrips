@@ -87,7 +87,12 @@
       const map = new Map();
       for (const e of events) {
         const d = toDate(e.start_time);
-        const key = d ? d.toISOString().slice(0,10) : 'sin-fecha';
+    
+        // ✅ clave por FECHA LOCAL (no UTC)
+        const key = d
+          ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+          : 'sin-fecha';
+    
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(e);
       }
@@ -173,7 +178,8 @@
         if (dayKey === 'sin-fecha') {
           dayHeader.textContent = 'Sin fecha';
         } else {
-          const d = new Date(dayKey + 'T00:00:00');
+          const parts = dayKey.split('-');
+          const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
           dayHeader.textContent = formatDay(d);
         }
 
