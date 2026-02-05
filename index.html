@@ -6,16 +6,37 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 30px; }
-    .trip { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: pointer; }
+    .trip { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; cursor: pointer; border-radius: 6px; }
     .trip:hover { background:#f7f7f7; }
-    .event { margin-left: 20px; padding: 10px 10px; border-left: 3px solid #007bff; margin-bottom: 8px; border-radius: 6px; background: #fafafa; }
+
+    .muted { opacity:.75; font-size: 13px; }
+
+    .day {
+      margin-left: 10px;
+      margin-top: 16px;
+      padding: 10px 12px;
+      background: #f2f4f7;
+      border-radius: 10px;
+      font-weight: 700;
+      display: inline-block;
+    }
+
+    .event {
+      margin-left: 20px;
+      padding: 10px 12px;
+      border-left: 3px solid #007bff;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      background: #fafafa;
+    }
     .event-title { font-weight: 600; margin-bottom: 4px; }
     .event-meta { font-size: 12px; opacity: .75; }
-    .muted { opacity:.75; font-size: 13px; }
+    .event-time { font-weight: 700; }
   </style>
 </head>
 <body>
   <h1>✈️ MyTrips</h1>
+
   <h2>Mis viajes</h2>
   <div id="trips"></div>
 
@@ -26,10 +47,10 @@
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
 
-    // ✅ Cliente Supabase (NO usar "supabase" como nombre de variable)
+    // ✅ Cliente Supabase
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // ✅ Mapeo de iconos por tipo (según tu constraint)
+    // ✅ Iconos por tipo (según constraint)
     const TYPE_ICONS = {
       flight: '✈️',
       hotel: '🏨',
@@ -37,11 +58,30 @@
       transfer: '🚗'
     };
 
-    function formatDateTime(value) {
-      if (!value) return 'Sin hora';
+    function toDate(value) {
+      if (!value) return null;
       const d = new Date(value);
-      if (isNaN(d.getTime())) return 'Sin hora';
-      return d.toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
+      if (isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    function formatDay(d) {
+      return d.toLocaleDateString('es-MX', { dateStyle: 'medium' });
+    }
+
+    function formatTime(d) {
+      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function groupByDay(events) {
+      const map = new Map();
+      for (const e of events) {
+        const d = toDate(e.start_time);
+        const key = d ? d.toISOString().slice(0,10) : 'sin-fecha';
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(e);
+      }
+      return map;
     }
 
     async function loadTrips() {
@@ -49,9 +89,6 @@
       tripsDiv.innerHTML = 'Cargando viajes...';
 
       const { data, error } = await sb.from('trips').select('*');
-
-      console.log('Trips data:', data);
-      console.log('Trips error:', error);
 
       if (error) {
         tripsDiv.innerText = 'Error cargando viajes: ' + error.message;
@@ -94,20 +131,62 @@
         return;
       }
 
-      eventsDiv.innerHTML = '';
-      (data || []).forEach(event => {
-        const div = document.createElement('div');
-        div.className = 'event';
+      // ✅ Agrupar por día
+      const grouped = groupByDay(data);
 
-        const icon = TYPE_ICONS[event.type] || '📌';
-        const when = formatDateTime(event.start_time);
-
-        div.innerHTML = `
-          <div class="event-title">${icon} ${when} — ${event.title}</div>
-          <div class="event-meta">tipo: ${event.type}</div>
-        `;
-        eventsDiv.appendChild(div);
+      // ✅ Ordenar días (sin-fecha al final)
+      const dayKeys = Array.from(grouped.keys()).sort((a,b) => {
+        if (a === 'sin-fecha') return 1;
+        if (b === 'sin-fecha') return -1;
+        return a.localeCompare(b);
       });
+
+      eventsDiv.innerHTML = '';
+
+      for (const dayKey of dayKeys) {
+        const list = grouped.get(dayKey);
+
+        // ordenar eventos dentro del día por hora
+        list.sort((a,b) => {
+          const da = toDate(a.start_time);
+          const db = toDate(b.start_time);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return da - db;
+        });
+
+        // Header del día
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'day';
+
+        if (dayKey === 'sin-fecha') {
+          dayHeader.textContent = 'Sin fecha';
+        } else {
+          const d = new Date(dayKey + 'T00:00:00');
+          dayHeader.textContent = formatDay(d);
+        }
+
+        eventsDiv.appendChild(dayHeader);
+
+        // Eventos
+        for (const event of list) {
+          const div = document.createElement('div');
+          div.className = 'event';
+
+          const icon = TYPE_ICONS[event.type] || '📌';
+          const d = toDate(event.start_time);
+          const time = d ? formatTime(d) : '--:--';
+
+          div.innerHTML = `
+            <div class="event-title">
+              ${icon} <span class="event-time">${time}</span> — ${event.title}
+            </div>
+            <div class="event-meta">tipo: ${event.type}</div>
+          `;
+          eventsDiv.appendChild(div);
+        }
+      }
     }
 
     loadTrips();
