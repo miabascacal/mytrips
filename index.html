@@ -177,6 +177,24 @@
       margin-top: 10px;
       color: var(--muted);
     }
+
+    /* ✅ NUEVO: badges "PRO" desde metadata */
+    .pro-row{
+      margin-top: 8px;
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .pro-badge{
+      border: 1px solid var(--border);
+      background: #ffffff;
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+    .pro-badge strong{ color:#111; font-weight: 700; }
+    .pro-badge a{ color: inherit; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -246,6 +264,68 @@
       return map;
     }
 
+    // ✅ NUEVO: helper para escapar texto (evitar HTML accidental)
+    function esc(s){
+      return String(s ?? '').replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+      }[m]));
+    }
+
+    // ✅ NUEVO: renderiza "datos PRO" desde metadata (según type)
+    function renderProBadges(event){
+      const meta = event.metadata;
+      const badges = [];
+
+      // location/source como PRO extra (aunque no estén en metadata)
+      if (event.location) badges.push(`<span class="pro-badge"><strong>📍</strong> ${esc(event.location)}</span>`);
+      if (event.source) badges.push(`<span class="pro-badge"><strong>source:</strong> ${esc(event.source)}</span>`);
+
+      if (!meta || typeof meta !== 'object') {
+        return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
+      }
+
+      const type = (event.type || '').toLowerCase();
+
+      if (type === 'flight') {
+        if (meta.flight_number) badges.push(`<span class="pro-badge"><strong>Vuelo:</strong> ${esc(meta.flight_number)}</span>`);
+        if (meta.airline) badges.push(`<span class="pro-badge"><strong>Aerolínea:</strong> ${esc(meta.airline)}</span>`);
+        if (meta.seat) badges.push(`<span class="pro-badge"><strong>Asiento:</strong> ${esc(meta.seat)}</span>`);
+        if (Array.isArray(meta.documents) && meta.documents.length) {
+          badges.push(`<span class="pro-badge"><strong>Docs:</strong> ${esc(meta.documents.join(', '))}</span>`);
+        }
+        if (meta.pnr) badges.push(`<span class="pro-badge"><strong>PNR:</strong> ${esc(meta.pnr)}</span>`);
+      }
+
+      if (type === 'hotel') {
+        if (meta.hotel_name) badges.push(`<span class="pro-badge"><strong>Hotel:</strong> ${esc(meta.hotel_name)}</span>`);
+        if (meta.check_in) badges.push(`<span class="pro-badge"><strong>Check-in:</strong> ${esc(meta.check_in)}</span>`);
+        if (meta.check_out) badges.push(`<span class="pro-badge"><strong>Check-out:</strong> ${esc(meta.check_out)}</span>`);
+        if (meta.address) badges.push(`<span class="pro-badge"><strong>Dirección:</strong> ${esc(meta.address)}</span>`);
+        if (meta.reservation) badges.push(`<span class="pro-badge"><strong>Reserva:</strong> ${esc(meta.reservation)}</span>`);
+      }
+
+      if (type === 'activity') {
+        if (meta.place) badges.push(`<span class="pro-badge"><strong>Lugar:</strong> ${esc(meta.place)}</span>`);
+        if (meta.operator) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.operator)}</span>`);
+        if (meta.ticket_url) badges.push(`<span class="pro-badge"><strong>Link:</strong> <a href="${esc(meta.ticket_url)}" target="_blank" rel="noopener">abrir</a></span>`);
+        if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
+      }
+
+      if (type === 'transfer') {
+        if (meta.pickup) badges.push(`<span class="pro-badge"><strong>Pickup:</strong> ${esc(meta.pickup)}</span>`);
+        if (meta.dropoff) badges.push(`<span class="pro-badge"><strong>Dropoff:</strong> ${esc(meta.dropoff)}</span>`);
+        if (meta.company) badges.push(`<span class="pro-badge"><strong>Proveedor:</strong> ${esc(meta.company)}</span>`);
+        if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
+      }
+
+      // Si hay metadata pero no coincide con campos esperados, muestra 1 badge debug
+      if (Object.keys(meta).length && badges.length === 0) {
+        badges.push(`<span class="pro-badge"><strong>meta:</strong> ${esc(Object.keys(meta).slice(0,4).join(', '))}${Object.keys(meta).length>4 ? '…' : ''}</span>`);
+      }
+
+      return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
+    }
+
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -297,6 +377,8 @@
         .from('events')
         .select('*')
         .eq('trip_id', tripId)
+        // ✅ PRO: orden “humano” si usas order_index; si no, igual funciona con start_time
+        .order('order_index', { ascending: true, nullsFirst: false })
         .order('start_time', { ascending: true });
 
       if (error) {
@@ -321,8 +403,14 @@
       for (const dayKey of dayKeys) {
         const list = grouped.get(dayKey) || [];
 
-        // Ordenar dentro del día
+        // Ordenar dentro del día: primero order_index si existe, luego por hora
         list.sort((a,b) => {
+          const ai = (a.order_index ?? null);
+          const bi = (b.order_index ?? null);
+          if (ai !== null && bi !== null && ai !== bi) return ai - bi;
+          if (ai !== null && bi === null) return -1;
+          if (ai === null && bi !== null) return 1;
+
           const da = toDate(a.start_time);
           const db = toDate(b.start_time);
           if (!da && !db) return 0;
@@ -360,6 +448,9 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
+          // ✅ NUEVO: si no hay description, pero sí metadata, se verá en PRO badges
+          const proBadgesHtml = renderProBadges(event);
+
           const card = document.createElement('div');
           card.className = 'event';
 
@@ -369,13 +460,14 @@
             </div>
             <div class="event-body">
               <div class="event-top">
-                <p class="event-title">${event.title || '(sin título)'}</p>
-                <div class="event-time">${time}</div>
+                <p class="event-title">${esc(event.title || '(sin título)')}</p>
+                <div class="event-time">${esc(time)}</div>
               </div>
-              ${event.description ? `<div class="event-desc">${event.description}</div>` : ``}
+              ${event.description ? `<div class="event-desc">${esc(event.description)}</div>` : ``}
+              ${proBadgesHtml}
               <div class="event-meta">
                 <span class="badge">${ui.label}</span>
-                <span class="badge">tipo: ${event.type || 'unknown'}</span>
+                <span class="badge">tipo: ${esc(event.type || 'unknown')}</span>
               </div>
             </div>
           `;
