@@ -25,15 +25,25 @@
     const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     async function loadTrips() {
-      const { data, error } = await supabase.from('trips').select('*');
       const tripsDiv = document.getElementById('trips');
-      tripsDiv.innerHTML = '';
-
+      tripsDiv.innerHTML = 'Cargando viajes...';
+    
+      const { data, error } = await supabase.from('trips').select('*');
+    
+      console.log('Trips data:', data);
+      console.log('Trips error:', error);
+    
       if (error) {
-        tripsDiv.innerText = 'Error cargando viajes';
+        tripsDiv.innerText = 'Error cargando viajes: ' + error.message;
         return;
       }
-
+    
+      if (!data || data.length === 0) {
+        tripsDiv.innerText = 'No hay viajes aún (la consulta regresó 0).';
+        return;
+      }
+    
+      tripsDiv.innerHTML = '';
       data.forEach(trip => {
         const div = document.createElement('div');
         div.className = 'trip';
