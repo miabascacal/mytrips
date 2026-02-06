@@ -772,6 +772,7 @@
       - CLOSE_ON_BACKDROP_CLICK: evita cierres accidentales del modal al tocar fuera (mobile)
       - DEFAULT_TIME_IF_ONLY_DATE: hora por defecto cuando solo hay fecha
       - CARD_TAP_MAX_MOVE_PX: umbral para diferenciar scroll vs tap en tarjetas (evita “click sensible”)
+      - CARD_BLOCK_EDIT_AFTER_QACTION_MS: ventana para bloquear abrir edición tras acción rápida (mejor en móvil)
       - SHOW_DB_DEBUG: imprime en consola detalles de errores de Supabase (para diagnosticar RLS/policies)
       - SHOW_RLS_HINTS: muestra un toast extra si detectamos bloqueo típico de RLS/policies
     ============================================================ */
@@ -780,7 +781,7 @@
     const CLOSE_ON_BACKDROP_CLICK = false;     // false = NO cerrar al tocar fondo (evita cierres accidentales)
     const DEFAULT_TIME_IF_ONLY_DATE = "09:00"; // hora por defecto si el usuario solo captura fecha
     const CARD_TAP_MAX_MOVE_PX = 10;           // si el dedo se mueve más, se asume scroll y no abre editar
-    const CARD_BLOCK_EDIT_AFTER_QACTION_MS = 450; // ventana para bloquear abrir edición después de usar botones rápidos (evita que se abra modal al dar click en Link/Copiar/Mapa)
+    const CARD_BLOCK_EDIT_AFTER_QACTION_MS = 700; // ventana para bloquear abrir edición después de usar botones rápidos (más robusto en móvil)
     const SHOW_DB_DEBUG = true;                // true = logs útiles en consola (Network/403/RLS)
     const SHOW_RLS_HINTS = true;               // true = si huele a RLS, avisamos con explicación clara
 
@@ -1728,11 +1729,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           return;
         }
 
-        /* ============================================================
-          ✅ NUEVO: UPDATE con select().single()
-          - Evita “fallos silenciosos”
-          - Si RLS/policy bloquea, aquí se ve el error real
-        ============================================================ */
         const { data, error } = await sb
           .from('trips')
           .update(payload)
@@ -1745,7 +1741,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           return;
         }
 
-        // ✅ Si por algún motivo no regresó data, lo reportamos como aviso
         if (!data) {
           showToast('warn', 'Guardar viaje', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
         } else {
@@ -1769,22 +1764,13 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
-      /* ============================================================
-        ✅ FASE 2.4: FIX FECHA SIN HORA
-        - Prioridad:
-          1) f_start (datetime-local)
-          2) f_date + f_time (fallback)
-          3) si hay fecha sin hora, usa DEFAULT_TIME_IF_ONLY_DATE
-      ============================================================ */
       const rawStart = (f_start.value || '').trim();
       let startIso = null;
 
       if (rawStart) {
-        // datetime-local debe venir como YYYY-MM-DDTHH:MM
         startIso = fromLocalInputToIso(rawStart);
         if (!startIso) startIso = null;
       } else {
-        // fallback: si el usuario eligió fecha (aunque no haya hora)
         const ds = (f_date.value || '').trim();
         const ts = (f_time.value || '').trim();
         if (ds){
@@ -1832,11 +1818,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
-      /* ============================================================
-        ✅ NUEVO: UPDATE con select().single()
-        - Evita “fallos silenciosos”
-        - Si RLS/policy bloquea, aquí se ve el error real
-      ============================================================ */
       const { data, error } = await sb
         .from('events')
         .update(payload)
@@ -1963,7 +1944,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
           div.classList.add('active');
 
-          // ✅ FASE 2.2: cargar preferencias por viaje
           loadViewPrefs();
           paintViewHint();
 
@@ -1976,7 +1956,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       if (!activeTripId) {
         activeTripId = data[0].id;
 
-        // ✅ FASE 2.2: cargar preferencias por viaje
         loadViewPrefs();
         paintViewHint();
 
@@ -2013,7 +1992,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       const dataClean = dedupeEvents(data);
 
-      // ✅ FASE 2.2: aplicar filtros sobre dataClean
       const filtered = dataClean.filter(eventMatchesFilters);
 
       LAST_EVENTS = filtered;
@@ -2032,16 +2010,12 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return a.localeCompare(b);
       });
 
-      // ✅ FASE 2.2: guardar day keys para expand/collapse all
       DAY_KEYS_CURRENT = dayKeys.slice();
 
-      // ✅ FASE 2.2: si NO hay estado guardado y hay acordeón ON, abrimos solo el primer día
-      // (sin forzar si ya existe estado colapsado guardado)
       try{
         const raw = localStorage.getItem(collapsedStorageKey());
         const hasSaved = !!raw;
         if (!hasSaved && accordionToggle.checked){
-          // colapsa todo menos el primer día (si existe)
           const firstDay = dayKeys.find(k => k !== 'sin-fecha') || dayKeys[0];
           const nextSet = new Set();
           dayKeys.forEach(k => { if (k !== firstDay) nextSet.add(k); });
@@ -2096,15 +2070,11 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         pill.appendChild(label);
 
         pill.onclick = () => {
-          // ✅ FASE 2.2: modo acordeón
           if (accordionToggle.checked){
-            // si estamos abriendo este día, colapsa los demás
-            const willCollapse = !isDayCollapsed(dayKey) ? true : false; // si está abierto -> lo colapsará; si está colapsado -> lo abrirá
+            const willCollapse = !isDayCollapsed(dayKey) ? true : false;
             if (willCollapse){
-              // colapsar este día (normal)
               toggleDayCollapsed(dayKey);
             } else {
-              // abrir este día y cerrar los demás
               const nextSet = new Set();
               DAY_KEYS_CURRENT.forEach(k => { if (k !== dayKey) nextSet.add(k); });
               COLLAPSED_DAYS = nextSet;
@@ -2114,7 +2084,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             return;
           }
 
-          // modo normal multi-día
           toggleDayCollapsed(dayKey);
           const nowCollapsed = isDayCollapsed(dayKey);
           caret.textContent = nowCollapsed ? '▸' : '▾';
@@ -2174,39 +2143,60 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           `;
 
           /* ============================================================
-            ✅ FASE 2.4: evitar “tap sensible” al hacer scroll
-            - Solo abre editar si fue un tap (movimiento mínimo)
+            ✅ FASE 2.4 (MEJORADO): TAP vs SCROLL + BLOQUEO REAL EN BOTONES
+            - FIX: en móvil, el click ocurre DESPUÉS del pointerup, por eso se abría editar.
+            - Solución pro:
+              1) Si el target del pointer es un .qbtn -> NO abrir editar (bypass inmediato).
+              2) Además, en .qbtn usamos pointerdown/touchstart para bloquear ANTES del pointerup del card.
           ============================================================ */
-            let downPt = null;
-            let blockEditUntil = 0; // timestamp: si es futuro, NO abrir edición (se usa cuando presionan botones rápidos)
-            
-            card.addEventListener('pointerdown', (e) => {
-              downPt = { x: e.clientX, y: e.clientY };
-            });
-            
-            card.addEventListener('pointerup', (e) => {
-              // ✅ si un botón rápido se usó hace poco, NO abrir modal
-              if (Date.now() < blockEditUntil) {
-                downPt = null;
-                return;
-              }
-            
-              if (!downPt) return;
-              const dx = Math.abs(e.clientX - downPt.x);
-              const dy = Math.abs(e.clientY - downPt.y);
-              downPt = null;
-            
-              if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
-                openModalEditEvent(event);
-              }
-            });
+          function isQuickActionTarget(el){
+            try{ return !!(el && el.closest && el.closest('.qbtn')); }catch(e){ return false; }
+          }
 
+          let downPt = null;
+          let blockEditUntil = 0; // timestamp: si es futuro, NO abrir edición (se usa cuando presionan botones rápidos)
 
-          // ✅ FASE 2.3: delegación botones (no abrir modal)
+          card.addEventListener('pointerdown', (e) => {
+            if (isQuickActionTarget(e.target)) { downPt = null; return; } // ✅ si tocó botón, no armamos tap del card
+            downPt = { x: e.clientX, y: e.clientY };
+          });
+
+          card.addEventListener('pointerup', (e) => {
+            if (isQuickActionTarget(e.target)) { downPt = null; return; } // ✅ si soltó en botón, NO abrir modal
+            if (Date.now() < blockEditUntil) { downPt = null; return; }   // ✅ bloqueo por ventana (robusto)
+
+            if (!downPt) return;
+            const dx = Math.abs(e.clientX - downPt.x);
+            const dy = Math.abs(e.clientY - downPt.y);
+            downPt = null;
+
+            if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
+              openModalEditEvent(event);
+            }
+          });
+
+          // ✅ FASE 2.3: botones rápidos (versión PRO: bloquea en pointerdown/touchstart)
           card.querySelectorAll('.qbtn').forEach(btn => {
+            const armBlock = (e) => {
+              try{
+                // ✅ esto ocurre ANTES del pointerup del card (clave para móvil)
+                blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS;
+                downPt = null; // ✅ limpia tap pendiente
+                e.preventDefault(); // evita “click fantasma”/selección
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              }catch(_e){}
+            };
+
+            btn.addEventListener('pointerdown', armBlock, { capture: true });
+            btn.addEventListener('touchstart', armBlock, { capture: true, passive: false });
+
             btn.addEventListener('click', async (e) => {
+              // ✅ por seguridad (desktop) mantenemos esto también
+              e.preventDefault();
               e.stopPropagation();
-              blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS; // ✅ bloquea abrir edición por un instante
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS;
 
               const action = btn.getAttribute('data-action');
               const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
