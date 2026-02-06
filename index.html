@@ -683,9 +683,9 @@
       if (!value) return null;
 
       const s = String(value).trim();
-
-      // ISO: 2026-02-16T16:00:00Z / 2026-02-16T16:00
       const iso = s.replace('Z','');
+
+      // ISO: 2026-02-16T16:00:00 / 2026-02-16T16:00
       if (/^\d{4}-\d{2}-\d{2}T/.test(iso)){
         const parts = iso.split(/[-T:.]/);
         const d = new Date(
@@ -698,7 +698,7 @@
         return isNaN(d.getTime()) ? null : d;
       }
 
-      // Si llegara algo tipo "2026-02-16" (solo fecha), lo interpretamos como 09:00
+      // Si llegara "YYYY-MM-DD" (solo fecha) => 09:00 default
       if (/^\d{4}-\d{2}-\d{2}$/.test(iso)){
         const parts = iso.split('-');
         const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 9, 0);
@@ -720,7 +720,7 @@
       ✅ NUEVO (CRUD): helper para input datetime-local
       - fromIsoToLocalInput(): ISO -> "YYYY-MM-DDTHH:MM"
       - fromLocalInputToIso(): "YYYY-MM-DDTHH:MM" -> ISO
-      ✅ FIX: si el usuario NO pone hora, guardamos 09:00 para no ir a "Sin fecha"
+      ✅ NUEVO: isoFromDateOnly() para default 09:00 si viene solo fecha
     ============================================================ */
     function fromIsoToLocalInput(iso){
       const d = toDate(iso);
@@ -734,8 +734,7 @@
     }
 
     function fromLocalInputToIso(localStr){
-      // localStr viene como "YYYY-MM-DDTHH:MM"
-      // Creamos Date local y lo guardamos como ISO
+      // localStr: "YYYY-MM-DDTHH:MM"
       if (!localStr) return null;
       const d = new Date(localStr);
       if (isNaN(d.getTime())) return null;
@@ -1244,7 +1243,9 @@
       ✅ NUEVO (CRUD): GUARDAR (EVENTS / TRIPS)
       - Si mode === "event": INSERT/UPDATE en events
       - Si mode === "trip": INSERT/UPDATE en trips
-      ✅ FIX: fecha sin hora -> guardamos 09:00
+      ✅ FIX CLAVE:
+      - Si llega solo "YYYY-MM-DD" (sin hora) => guardamos 09:00 default
+      - Si viene vacío => null ("Sin fecha")
     ============================================================ */
     saveBtn.onclick = async () => {
       if (mode === "trip") {
@@ -1301,12 +1302,21 @@
         return;
       }
 
-      // start_time (si el usuario no pone hora, guardamos 09:00)
-      let startIso = fromLocalInputToIso(f_start.value);
-      if (!startIso) {
-        // Si no puso nada, lo dejamos null (irá a "Sin fecha")
-        // Si quieres obligar fecha, aquí sería el lugar.
+      // start_time robusto:
+      // - datetime-local normal: "YYYY-MM-DDTHH:MM" => ISO
+      // - caso raro: "YYYY-MM-DD" => ISO con 09:00
+      // - vacío => null (Sin fecha)
+      const rawStart = (f_start.value || '').trim();
+      let startIso = null;
+
+      if (!rawStart) {
         startIso = null;
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawStart)) {
+        startIso = isoFromDateOnly(rawStart, "09:00");
+      } else {
+        startIso = fromLocalInputToIso(rawStart);
+        // Si por alguna razón falla, lo dejamos null
+        if (!startIso) startIso = null;
       }
 
       // order_index (opcional)
@@ -1335,12 +1345,6 @@
         description: f_desc.value.trim() || null,
         metadata: metaObj
       };
-
-      // ✅ FIX: si viene solo fecha (algunos navegadores raros), normalizamos
-      // - datetime-local normalmente siempre trae hora, pero por seguridad:
-      if (f_start.value && /^\d{4}-\d{2}-\d{2}$/.test(f_start.value)) {
-        payload.start_time = isoFromDateOnly(f_start.value, "09:00");
-      }
 
       // INSERT event
       if (!editingEventId) {
