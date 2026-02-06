@@ -139,6 +139,7 @@
       padding: 12px 12px;
       margin: 10px 0;
       box-shadow: var(--shadow);
+      cursor: pointer; /* ✅ NUEVO: click para editar */
     }
 
     .icon{
@@ -285,6 +286,94 @@
       font-size: 12px;
       color: var(--muted);
     }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): MODAL + FORM
+      - Se usa para Agregar / Editar / Borrar eventos
+    ============================================================ */
+    .modal-backdrop{
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.35);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 9999;
+    }
+
+    .modal{
+      width: min(760px, 100%);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+      overflow: hidden;
+    }
+
+    .modal-head{
+      padding: 12px 14px;
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-body{ padding: 14px; }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    @media (max-width: 720px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .field label{
+      font-size: 12px;
+      color: var(--muted);
+      display:block;
+      margin-bottom: 4px;
+    }
+    .field input, .field select, .field textarea{
+      width: 100%;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      outline: none;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .field textarea{
+      min-height: 90px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .modal-actions{
+      padding: 12px 14px;
+      display:flex;
+      gap: 10px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .btn.primary{
+      background: #111;
+      color: #fff;
+      border-color: #111;
+    }
+    .btn.danger{
+      border-color: rgba(239,68,68,.55);
+    }
+    .modal-hint{
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 8px;
+      line-height: 1.35;
+    }
   </style>
 </head>
 
@@ -294,6 +383,9 @@
     - trips: lista de viajes
     - toolbar: activar notificaciones
     - events: timeline agrupado por día
+    ✅ NUEVO (CRUD):
+    - botón "Agregar evento"
+    - modal para agregar/editar/borrar
   ============================================================ -->
   <div class="container">
     <div class="header">
@@ -311,7 +403,97 @@
       <span id="notifStatus" class="hint"></span>
     </div>
 
+    <!-- ✅ NUEVO (CRUD): toolbar -->
+    <div class="toolbar">
+      <button id="addEventBtn" class="btn">➕ Agregar evento</button>
+      <span class="hint">Tip: click en una tarjeta para editarla.</span>
+    </div>
+
     <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
+  </div>
+
+  <!-- ============================================================
+    ✅ NUEVO (CRUD): MODAL
+    - Reutilizable para agregar/editar
+    - También incluye botón eliminar cuando estás editando
+  ============================================================ -->
+  <div id="modalBackdrop" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-head">
+        <strong id="modalTitle">Agregar evento</strong>
+        <button id="closeModalBtn" class="btn">✖</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="grid">
+          <div class="field">
+            <label>Título</label>
+            <input id="f_title" placeholder="Ej. Vuelo CDMX → París" />
+          </div>
+
+          <div class="field">
+            <label>Tipo (type)</label>
+            <select id="f_type">
+              <option value="flight">flight</option>
+              <option value="hotel">hotel</option>
+              <option value="activity">activity</option>
+              <option value="transfer">transfer</option>
+              <option value="cruise">cruise</option>
+              <option value="car">car</option>
+              <option value="bus">bus</option>
+              <option value="train">train</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Fecha/Hora inicio (start_time)</label>
+            <input id="f_start" type="datetime-local" />
+          </div>
+
+          <div class="field">
+            <label>Orden (order_index)</label>
+            <input id="f_order" type="number" placeholder="Ej. 10" />
+          </div>
+
+          <div class="field">
+            <label>Ubicación (location)</label>
+            <input id="f_location" placeholder="Ej. Aeropuerto CDMX T1" />
+          </div>
+
+          <div class="field">
+            <label>Fuente (source)</label>
+            <select id="f_source">
+              <option value="manual">manual</option>
+              <option value="email">email</option>
+              <option value="pdf">pdf</option>
+              <option value="whatsapp">whatsapp</option>
+              <option value="other">other</option>
+            </select>
+          </div>
+
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Descripción</label>
+            <input id="f_desc" placeholder="Notas rápidas, documentos, recomendaciones, etc." />
+          </div>
+
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>Metadata (JSON)</label>
+            <textarea id="f_meta" placeholder='Ej: {"airline":"AirFrance","flight_number":"AF0175","checkin_url":"https://..."}'></textarea>
+            <div class="modal-hint">
+              - Debe ser JSON válido. <br/>
+              - Si lo dejas vacío, se guarda como {}. <br/>
+              - Puedes usarlo para: airline, flight_number, seat, documents, checkin_url, booking_url, coords, etc.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="deleteBtn" class="btn danger" style="display:none;">🗑️ Borrar</button>
+        <button id="saveBtn" class="btn primary">💾 Guardar</button>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -374,6 +556,7 @@
       ✅ NUEVO (mejora agrupada #1): Normalización ES → EN
       - Para que si en BD viene "crucero/automovil/autobus" también matchee
       - Incluye soporte de acentos (autobús/automóvil)
+      ✅ FIX: te faltaba una coma antes de "tren"
     ============================================================ */
     const TYPE_ALIASES = {
       crucero: 'cruise',
@@ -389,9 +572,8 @@
       uber: 'transfer',
       taxi: 'transfer',
       traslado: 'transfer',
-      transferencia: 'transfer'
+      transferencia: 'transfer',
       tren: 'train'
-      
     };
 
     function normalizeType(raw){
@@ -452,6 +634,31 @@
 
     function formatTime(d) {
       return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): helper para input datetime-local
+      - fromIsoToLocalInput(): ISO -> "YYYY-MM-DDTHH:MM"
+      - fromLocalInputToIso(): "YYYY-MM-DDTHH:MM" -> ISO
+    ============================================================ */
+    function fromIsoToLocalInput(iso){
+      const d = toDate(iso);
+      if (!d) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      return `${y}-${m}-${day}T${hh}:${mm}`;
+    }
+
+    function fromLocalInputToIso(localStr){
+      // localStr viene como "YYYY-MM-DDTHH:MM"
+      // Creamos Date local y lo guardamos como ISO
+      if (!localStr) return null;
+      const d = new Date(localStr);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString();
     }
 
     /* ============================================================
@@ -574,7 +781,7 @@
 
         const meta = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
 
-        // ✅ NUEVO: normaliza type para que "crucero/autobús" no rompa reglas
+        // ✅ normaliza type para que "crucero/autobús" no rompa reglas
         const type = normalizeType(ev.type);
 
         const minsToStart = Math.round((start.getTime() - now) / 60000);
@@ -652,7 +859,7 @@
       (Estas son VISUALES, no notificación)
     ============================================================ */
     function renderAlerts(event){
-      // ✅ NUEVO: normaliza type para ES/acentos
+      // normaliza type para ES/acentos
       const type = normalizeType(event.type);
 
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
@@ -716,14 +923,8 @@
         return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
       }
 
-      // OJO: aquí dejamos tu lógica como estaba (type sin normalizar),
-      // porque tus ifs están en inglés y tu BD idealmente igual.
-      // Si quieres hacerlo 100% robusto, lo normalizo también.
       const type = normalizeType(event.type);
 
-      /* ✅ OPCIONAL (si guardas “subtype” en metadata):
-         - Si type === activity y meta.subtype existe, lo mostramos como badge.
-      */
       if (type === 'activity' && meta.subtype) {
         badges.push(`<span class="pro-badge"><strong>subtype:</strong> ${esc(meta.subtype)}</span>`);
       }
@@ -757,7 +958,6 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ transfer + car + bus comparten lógica de traslado
       if (type === 'transfer' || type === 'car' || type === 'bus') {
         if (meta.pickup) badges.push(`<span class="pro-badge"><strong>Pickup:</strong> ${esc(meta.pickup)}</span>`);
         if (meta.dropoff) badges.push(`<span class="pro-badge"><strong>Dropoff:</strong> ${esc(meta.dropoff)}</span>`);
@@ -765,20 +965,17 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ cruise: campos típicos (si los guardas en metadata)
       if (type === 'cruise') {
         if (meta.operator) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.operator)}</span>`);
         if (meta.cabin) badges.push(`<span class="pro-badge"><strong>Cabina:</strong> ${esc(meta.cabin)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ train (si guardas datos en metadata)
       if (type === 'train') {
         if (meta.company) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.company)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // Si hay metadata pero no coincide con campos esperados
       if (Object.keys(meta).length && badges.length === 0) {
         badges.push(`<span class="pro-badge"><strong>meta:</strong> ${esc(Object.keys(meta).slice(0,4).join(', '))}${Object.keys(meta).length>4 ? '…' : ''}</span>`);
       }
@@ -786,6 +983,206 @@
       return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
     }
 
+    /* ============================================================
+      ✅ NUEVO (CRUD): REFERENCIAS A ELEMENTOS DEL MODAL
+      - Aquí guardamos los inputs para leer/escribir valores
+    ============================================================ */
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const modalTitle = document.getElementById('modalTitle');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const deleteBtn = document.getElementById('deleteBtn');
+
+    const f_title = document.getElementById('f_title');
+    const f_type = document.getElementById('f_type');
+    const f_start = document.getElementById('f_start');
+    const f_order = document.getElementById('f_order');
+    const f_location = document.getElementById('f_location');
+    const f_source = document.getElementById('f_source');
+    const f_desc = document.getElementById('f_desc');
+    const f_meta = document.getElementById('f_meta');
+
+    const addEventBtn = document.getElementById('addEventBtn');
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): ESTADO DEL MODAL
+      - editingEventId: si es null => estamos creando
+      - si tiene valor => estamos editando ese evento (update/delete)
+    ============================================================ */
+    let editingEventId = null;
+
+    function openModal(){
+      modalBackdrop.style.display = 'flex';
+    }
+    function closeModal(){
+      modalBackdrop.style.display = 'none';
+      editingEventId = null;
+    }
+
+    closeModalBtn.onclick = closeModal;
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) closeModal();
+    });
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): LIMPIAR FORM
+      - Lo usamos al crear evento nuevo
+    ============================================================ */
+    function resetForm(){
+      f_title.value = '';
+      f_type.value = 'activity';
+      f_start.value = '';
+      f_order.value = '';
+      f_location.value = '';
+      f_source.value = 'manual';
+      f_desc.value = '';
+      f_meta.value = '';
+    }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): ABRIR MODAL PARA CREAR
+      - Requiere activeTripId (porque todo evento pertenece a un trip)
+    ============================================================ */
+    addEventBtn.onclick = () => {
+      if (!activeTripId) {
+        alert('Primero selecciona un viaje.');
+        return;
+      }
+      editingEventId = null;
+      modalTitle.textContent = 'Agregar evento';
+      deleteBtn.style.display = 'none';
+      saveBtn.textContent = '💾 Guardar';
+
+      resetForm();
+      openModal();
+    };
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): ABRIR MODAL PARA EDITAR (click en card)
+      - Cargamos valores del evento al formulario
+    ============================================================ */
+    function openModalEdit(event){
+      editingEventId = event.id;
+
+      modalTitle.textContent = 'Editar evento';
+      deleteBtn.style.display = 'inline-block';
+      saveBtn.textContent = '💾 Guardar cambios';
+
+      f_title.value = event.title || '';
+      f_type.value = normalizeType(event.type || 'other'); // UI muestra normalizado
+      f_start.value = fromIsoToLocalInput(event.start_time);
+      f_order.value = (event.order_index ?? '') === null ? '' : String(event.order_index ?? '');
+      f_location.value = event.location || '';
+      f_source.value = event.source || 'manual';
+      f_desc.value = event.description || '';
+
+      // Metadata: lo mostramos como JSON bonito
+      try {
+        const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+        f_meta.value = JSON.stringify(meta, null, 2);
+      } catch(e) {
+        f_meta.value = '';
+      }
+
+      openModal();
+    }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): GUARDAR (INSERT/UPDATE)
+      - Si editingEventId es null => INSERT
+      - Si tiene id => UPDATE
+    ============================================================ */
+    saveBtn.onclick = async () => {
+      if (!activeTripId) {
+        alert('Primero selecciona un viaje.');
+        return;
+      }
+
+      const title = f_title.value.trim();
+      if (!title) {
+        alert('El título es obligatorio.');
+        return;
+      }
+
+      // start_time
+      const startIso = fromLocalInputToIso(f_start.value);
+
+      // order_index (opcional)
+      const orderIndex = f_order.value === '' ? null : Number(f_order.value);
+
+      // metadata JSON (opcional)
+      let metaObj = {};
+      const metaRaw = f_meta.value.trim();
+      if (metaRaw) {
+        try {
+          metaObj = JSON.parse(metaRaw);
+        } catch (e) {
+          alert('Metadata no es JSON válido. Corrígelo o déjalo vacío.');
+          return;
+        }
+      }
+
+      // IMPORTANTE:
+      // - type se guarda “tal cual” del selector (ya en EN).
+      // - Si el usuario escribe "Autobús" manualmente en BD, tu normalización lo soporta.
+      const payload = {
+        trip_id: activeTripId,
+        title,
+        type: f_type.value,
+        start_time: startIso,
+        order_index: (Number.isFinite(orderIndex) ? orderIndex : null),
+        location: f_location.value.trim() || null,
+        source: f_source.value || 'manual',
+        description: f_desc.value.trim() || null,
+        metadata: metaObj
+      };
+
+      // INSERT
+      if (!editingEventId) {
+        const { error } = await sb.from('events').insert(payload);
+        if (error) {
+          alert('Error al crear: ' + error.message);
+          return;
+        }
+        closeModal();
+        loadEvents(activeTripId);
+        return;
+      }
+
+      // UPDATE
+      const { error } = await sb.from('events').update(payload).eq('id', editingEventId);
+      if (error) {
+        alert('Error al guardar cambios: ' + error.message);
+        return;
+      }
+
+      closeModal();
+      loadEvents(activeTripId);
+    };
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): BORRAR
+      - Solo disponible cuando editas un evento
+    ============================================================ */
+    deleteBtn.onclick = async () => {
+      if (!editingEventId) return;
+
+      const ok = confirm('¿Seguro que quieres borrar este evento? Esta acción no se puede deshacer.');
+      if (!ok) return;
+
+      const { error } = await sb.from('events').delete().eq('id', editingEventId);
+      if (error) {
+        alert('Error al borrar: ' + error.message);
+        return;
+      }
+
+      closeModal();
+      loadEvents(activeTripId);
+    };
+
+    /* ============================================================
+      ✅ CARGAR TRIPS
+    ============================================================ */
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -829,6 +1226,14 @@
       }
     }
 
+    /* ============================================================
+      ✅ CARGAR EVENTS (timeline)
+      - lee events por trip
+      - ordena por order_index y start_time
+      - agrupa por día y pinta tarjetas
+      ✅ NUEVO:
+      - click en tarjeta => editar (openModalEdit)
+    ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
       eventsDiv.classList.remove('muted');
@@ -851,7 +1256,7 @@
         return;
       }
 
-      // ✅ NUEVO: opcional anti-duplicados (si hubo carga doble)
+      // opcional anti-duplicados (si hubo carga doble)
       const dataClean = dedupeEvents(data);
 
       LAST_EVENTS = dataClean;
@@ -907,7 +1312,7 @@
         eventsDiv.appendChild(dayRow);
 
         for (const event of list) {
-          // ✅ NUEVO: normalización aplicada aquí también
+          // normalización aplicada aquí también
           const type = normalizeType(event.type);
 
           const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
@@ -946,11 +1351,19 @@
             </div>
           `;
 
+          // ✅ NUEVO: click para editar/borrar
+          card.onclick = () => openModalEdit(event);
+
           eventsDiv.appendChild(card);
         }
       }
     }
 
+    /* ============================================================
+      ✅ AUTO-REFRESH (cada 2 min)
+      - refresca timeline del trip activo
+      - útil si hay cambios en BD mientras está abierto
+    ============================================================ */
     setInterval(() => {
       if (activeTripId) loadEvents(activeTripId);
     }, 2 * 60 * 1000);
