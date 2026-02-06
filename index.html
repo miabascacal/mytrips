@@ -793,7 +793,9 @@
       ✅ ESTADO DE APP
     ============================================================ */
     let activeTripId = null;
-
+    // ✅ NUEVO: control de toggle expand/contrae del timeline por viaje
+    let LAST_TOGGLED_TRIP_ID = null; // guarda el último viaje clicado (para saber si es el mismo)
+    let TIMELINE_IS_EXPANDED = false; // true=timeline visible, false=timeline colapsado
     /* ============================================================
       ✅ FASE 2.4 (NUEVO): VARIABLES DE COMPORTAMIENTO (con descripción)
     ============================================================ */
