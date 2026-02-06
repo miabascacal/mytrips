@@ -780,6 +780,7 @@
     const CLOSE_ON_BACKDROP_CLICK = false;     // false = NO cerrar al tocar fondo (evita cierres accidentales)
     const DEFAULT_TIME_IF_ONLY_DATE = "09:00"; // hora por defecto si el usuario solo captura fecha
     const CARD_TAP_MAX_MOVE_PX = 10;           // si el dedo se mueve más, se asume scroll y no abre editar
+    const CARD_BLOCK_EDIT_AFTER_QACTION_MS = 450; // ventana para bloquear abrir edición después de usar botones rápidos (evita que se abra modal al dar click en Link/Copiar/Mapa)
     const SHOW_DB_DEBUG = true;                // true = logs útiles en consola (Network/403/RLS)
     const SHOW_RLS_HINTS = true;               // true = si huele a RLS, avisamos con explicación clara
 
@@ -2176,19 +2177,30 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             ✅ FASE 2.4: evitar “tap sensible” al hacer scroll
             - Solo abre editar si fue un tap (movimiento mínimo)
           ============================================================ */
-          let downPt = null;
-          card.addEventListener('pointerdown', (e) => {
-            downPt = { x: e.clientX, y: e.clientY };
-          });
-          card.addEventListener('pointerup', (e) => {
-            if (!downPt) return;
-            const dx = Math.abs(e.clientX - downPt.x);
-            const dy = Math.abs(e.clientY - downPt.y);
-            downPt = null;
-            if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
-              openModalEditEvent(event);
-            }
-          });
+            let downPt = null;
+            let blockEditUntil = 0; // timestamp: si es futuro, NO abrir edición (se usa cuando presionan botones rápidos)
+            
+            card.addEventListener('pointerdown', (e) => {
+              downPt = { x: e.clientX, y: e.clientY };
+            });
+            
+            card.addEventListener('pointerup', (e) => {
+              // ✅ si un botón rápido se usó hace poco, NO abrir modal
+              if (Date.now() < blockEditUntil) {
+                downPt = null;
+                return;
+              }
+            
+              if (!downPt) return;
+              const dx = Math.abs(e.clientX - downPt.x);
+              const dy = Math.abs(e.clientY - downPt.y);
+              downPt = null;
+            
+              if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
+                openModalEditEvent(event);
+              }
+            });
+
 
           // ✅ FASE 2.3: delegación botones (no abrir modal)
           card.querySelectorAll('.qbtn').forEach(btn => {
