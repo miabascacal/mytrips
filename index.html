@@ -144,11 +144,11 @@
       align-items: center;
       gap: 8px;
       font-size: 13px;
-      cursor: pointer;            /* ✅ NUEVO */
-      user-select: none;          /* ✅ NUEVO */
+      cursor: pointer;
+      user-select: none;
     }
-    .day:hover{ filter: brightness(0.98); } /* ✅ NUEVO */
-    .day-caret{ font-size: 12px; opacity: .75; } /* ✅ NUEVO */
+    .day:hover{ filter: brightness(0.98); }
+    .day-caret{ font-size: 12px; opacity: .75; }
     .day-line{ height: 1px; flex:1; background: var(--border); }
 
     /* ✅ NUEVO: wrapper para eventos por día (para colapsar) */
@@ -171,7 +171,7 @@
       padding: 12px 12px;
       margin: 10px 0;
       box-shadow: var(--shadow);
-      cursor: pointer; /* ✅ NUEVO: click para editar */
+      cursor: pointer;
     }
 
     .icon{
@@ -269,9 +269,6 @@
 
     /* ============================================================
       ✅ BADGES "PRO" (metadata)
-      - Aquí salen los datos adicionales: airline, flight_number,
-        checkin_url, hotel_name, operator, etc.
-      - También el link "Mapa" usando location o coords
     ============================================================ */
     .pro-row{
       margin-top: 8px;
@@ -292,8 +289,6 @@
 
     /* ============================================================
       ✅ TOOLBAR NOTIFICACIONES
-      - Botón “Activar notificaciones”
-      - Texto de estado (si están activadas/bloqueadas/no soportadas)
     ============================================================ */
     .toolbar{
       display:flex;
@@ -328,10 +323,55 @@
     }
 
     /* ============================================================
+      ✅ FASE 2.2 (NUEVO): BUSCADOR + FILTROS
+      - UI ligera, sin romper estilos existentes
+    ============================================================ */
+    .filters{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap: wrap;
+      margin: 8px 0 14px;
+    }
+    .filters input, .filters select{
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      outline: none;
+    }
+    .filters input{
+      flex: 1 1 320px;
+      min-width: 220px;
+    }
+    .filters select{
+      flex: 0 0 auto;
+      min-width: 190px;
+      background:#fff;
+    }
+    .chipbar{
+      display:flex;
+      gap:8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .chip{
+      border: 1px solid var(--border);
+      background:#fff;
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor:pointer;
+      font-weight: 800;
+      font-size: 12px;
+      user-select:none;
+    }
+    .chip.active{
+      border-color:#111;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+
+    /* ============================================================
       ✅ NUEVO (CRUD): MODAL + FORM
-      - Se usa para Agregar / Editar / Borrar eventos
-      ✅ NUEVO (TRIPS CRUD):
-      - Se reutiliza el mismo modal cambiando campos
     ============================================================ */
     .modal-backdrop{
       position: fixed;
@@ -415,14 +455,6 @@
 <body>
   <!-- ============================================================
     ✅ UI (HTML)
-    - trips: lista de viajes
-    - toolbar: activar notificaciones
-    - events: timeline agrupado por día
-    ✅ NUEVO (CRUD):
-    - botón "Agregar evento"
-    - modal para agregar/editar/borrar
-    ✅ NUEVO (TRIPS CRUD):
-    - Agregar viaje / editar nombre / borrar viaje
   ============================================================ -->
   <div class="container">
     <div class="header">
@@ -432,7 +464,6 @@
 
     <h2>Mis viajes</h2>
 
-    <!-- ✅ NUEVO (TRIPS CRUD): toolbar -->
     <div class="toolbar">
       <button id="addTripBtn" class="btn">➕ Agregar viaje</button>
       <span class="hint">Tip: selecciona un viaje para ver su timeline.</span>
@@ -447,10 +478,35 @@
       <span id="notifStatus" class="hint"></span>
     </div>
 
-    <!-- ✅ NUEVO (CRUD): toolbar -->
     <div class="toolbar">
       <button id="addEventBtn" class="btn">➕ Agregar evento</button>
       <span class="hint">Tip: click en una tarjeta para editarla.</span>
+    </div>
+
+    <!-- ============================================================
+      ✅ FASE 2.2 (NUEVO): BUSCADOR + FILTROS + VISTA RÁPIDA
+    ============================================================ -->
+    <div class="filters">
+      <input id="searchInput" placeholder="🔎 Buscar (título, descripción, lugar, metadata, etc.)" />
+      <select id="typeFilter">
+        <option value="">Todos los tipos</option>
+        <option value="flight">flight</option>
+        <option value="hotel">hotel</option>
+        <option value="activity">activity</option>
+        <option value="transfer">transfer</option>
+        <option value="cruise">cruise</option>
+        <option value="car">car</option>
+        <option value="bus">bus</option>
+        <option value="train">train</option>
+        <option value="other">other</option>
+      </select>
+    </div>
+
+    <div class="chipbar" aria-label="Vista rápida">
+      <div class="chip active" data-range="all">Todo</div>
+      <div class="chip" data-range="today">Hoy</div>
+      <div class="chip" data-range="tomorrow">Mañana</div>
+      <div class="chip" data-range="next7">Próximos 7 días</div>
     </div>
 
     <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
@@ -458,9 +514,6 @@
 
   <!-- ============================================================
     ✅ MODAL ÚNICO (EVENTS + TRIPS)
-    - Reutilizable para:
-      (A) agregar/editar/borrar evento
-      (B) agregar/editar/borrar viaje
   ============================================================ -->
   <div id="modalBackdrop" class="modal-backdrop">
     <div class="modal">
@@ -470,10 +523,6 @@
       </div>
 
       <div class="modal-body">
-
-        <!-- ============================================================
-          ✅ FORM TRIP (solo título + fechas)
-        ============================================================ -->
         <div id="tripForm" class="hidden">
           <div class="grid">
             <div class="field" style="grid-column: 1 / -1;">
@@ -498,9 +547,6 @@
           </div>
         </div>
 
-        <!-- ============================================================
-          ✅ FORM EVENT (tu modal original)
-        ============================================================ -->
         <div id="eventForm">
           <div class="grid">
             <div class="field">
@@ -565,7 +611,6 @@
             </div>
           </div>
         </div>
-
       </div>
 
       <div class="modal-actions">
@@ -578,9 +623,6 @@
   <script>
     /* ============================================================
       ✅ CONEXIÓN A SUPABASE
-      - createClient() permite leer tablas "trips" y "events"
-      - OJO: este key es público (publishable). Está bien para lectura
-        si tu RLS lo permite. Nunca pongas un service_role aquí.
     ============================================================ */
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
@@ -588,25 +630,17 @@
 
     /* ============================================================
       ✅ ESTADO DE APP
-      - activeTripId: qué viaje está seleccionado
     ============================================================ */
     let activeTripId = null;
 
     /* ============================================================
       ✅ D4.3: CACHE + LOOP DE NOTIFICACIONES (sin recargar)
-      - LAST_EVENTS: guarda los eventos del viaje activo (última carga)
-      - NOTIF_TIMER: interval para reevaluar reglas cada minuto
-      - startNotifLoop(): inicia o reinicia el loop sin duplicarlo
     ============================================================ */
     let LAST_EVENTS = [];
     let NOTIF_TIMER = null;
 
     function startNotifLoop(){
-      // Evita tener 2 loops corriendo a la vez
       if (NOTIF_TIMER) clearInterval(NOTIF_TIMER);
-
-      // Cada 60s reevaluamos reglas (2h, 30m, checkin 48h)
-      // IMPORTANTE: solo sirve si la pestaña sigue abierta.
       NOTIF_TIMER = setInterval(() => {
         if (LAST_EVENTS && LAST_EVENTS.length) {
           runNotificationRules(LAST_EVENTS);
@@ -616,8 +650,6 @@
 
     /* ============================================================
       ✅ FASE 2.1: COLAPSAR / EXPANDIR POR DÍA
-      - Guardamos estado por viaje en localStorage
-      - Click en la píldora del día: toggle
     ============================================================ */
     let COLLAPSED_DAYS = new Set();
 
@@ -655,8 +687,6 @@
 
     /* ============================================================
       ✅ UI POR TIPO DE EVENTO
-      - icon/color/bg/label define cómo se ve cada tipo
-      ✅ BD NORMALIZADA: cruise / car / bus / train
     ============================================================ */
     const TYPE_UI = {
       flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
@@ -670,12 +700,6 @@
       other:    { icon:'📌', color:'var(--other)',  bg:'var(--otherBg)',  label:'Otro' }
     };
 
-    /* ============================================================
-      ✅ NUEVO (mejora agrupada #1): Normalización ES → EN
-      - Para que si en BD viene "crucero/automovil/autobus" también matchee
-      - Incluye soporte de acentos (autobús/automóvil)
-      ✅ FIX: coma antes de "tren"
-    ============================================================ */
     const TYPE_ALIASES = {
       crucero: 'cruise',
       cruceros: 'cruise',
@@ -696,19 +720,10 @@
 
     function normalizeType(raw){
       let t = (raw || '').toLowerCase().trim();
-
-      // Quita acentos: "autobús" -> "autobus", "automóvil" -> "automovil"
-      try {
-        t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      } catch(e) {}
-
+      try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
       return TYPE_ALIASES[t] || t;
     }
 
-    /* ============================================================
-      ✅ NUEVO (mejora agrupada #2): Anti-duplicados opcional
-      - Si lo quieres apagar: pon false
-    ============================================================ */
     const ENABLE_DEDUP = true;
 
     function dedupeEvents(list){
@@ -724,20 +739,11 @@
       return out;
     }
 
-    /* ============================================================
-      ✅ HELPERS DE FECHA/HORA
-      - toDate(): convierte timestamps de Supabase a Date()
-      - formatDay(): formatea fecha en español
-      - formatTime(): formatea hora HH:MM
-      ✅ FIX: toDate robusto para no mandar eventos a "Sin fecha"
-    ============================================================ */
     function toDate(value) {
       if (!value) return null;
-
       const s = String(value).trim();
       const iso = s.replace('Z','');
 
-      // ISO: 2026-02-16T16:00:00 / 2026-02-16T16:00
       if (/^\d{4}-\d{2}-\d{2}T/.test(iso)){
         const parts = iso.split(/[-T:.]/);
         const d = new Date(
@@ -750,7 +756,6 @@
         return isNaN(d.getTime()) ? null : d;
       }
 
-      // Si llegara "YYYY-MM-DD" (solo fecha) => 09:00 default
       if (/^\d{4}-\d{2}-\d{2}$/.test(iso)){
         const parts = iso.split('-');
         const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 9, 0);
@@ -768,12 +773,6 @@
       return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     }
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): helper para input datetime-local
-      - fromIsoToLocalInput(): ISO -> "YYYY-MM-DDTHH:MM"
-      - fromLocalInputToIso(): "YYYY-MM-DDTHH:MM" -> ISO
-      ✅ NUEVO: isoFromDateOnly() para default 09:00 si viene solo fecha
-    ============================================================ */
     function fromIsoToLocalInput(iso){
       const d = toDate(iso);
       if (!d) return '';
@@ -786,7 +785,6 @@
     }
 
     function fromLocalInputToIso(localStr){
-      // localStr: "YYYY-MM-DDTHH:MM"
       if (!localStr) return null;
       const d = new Date(localStr);
       if (isNaN(d.getTime())) return null;
@@ -794,18 +792,12 @@
     }
 
     function isoFromDateOnly(dateStr, defaultHHMM = "09:00"){
-      // dateStr: "YYYY-MM-DD"
       if (!dateStr) return null;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
       const local = `${dateStr}T${defaultHHMM}`;
       return fromLocalInputToIso(local);
     }
 
-    /* ============================================================
-      ✅ AGRUPAR EVENTOS POR DÍA
-      - groupByDay(): crea un Map donde la key es YYYY-MM-DD
-      - si no hay start_time => "sin-fecha"
-    ============================================================ */
     function groupByDay(events) {
       const map = new Map();
       for (const e of events) {
@@ -820,21 +812,12 @@
       return map;
     }
 
-    /* ============================================================
-      ✅ ESCAPAR TEXTO (seguridad / evitar HTML accidental)
-      - esc(): evita que un title/description con "<script>" se ejecute
-    ============================================================ */
     function esc(s){
       return String(s ?? '').replace(/[&<>"']/g, m => ({
         '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
       }[m]));
     }
 
-    /* ============================================================
-      ✅ GOOGLE MAPS LINK
-      - Si metadata.coords existe => link directo a lat,lng
-      - Si no => usa "location" como búsqueda (Opción A)
-    ============================================================ */
     function mapsUrlFromMetaOrLocation(meta, location){
       const coords = meta?.coords;
       if (coords?.lat && coords?.lng) {
@@ -846,11 +829,6 @@
       return null;
     }
 
-    /* ============================================================
-      ✅ HELPERS DE TIEMPO RELATIVO (para alertas)
-      - msUntil(): ms faltantes para el evento
-      - humanCountdown(): “en 2h 10m” o “hace 5m”
-    ============================================================ */
     function msUntil(date){
       if (!date) return null;
       return date.getTime() - Date.now();
@@ -868,14 +846,6 @@
       return sign < 0 ? `hace ${txt}` : `en ${txt}`;
     }
 
-    /* ============================================================
-      ✅ NOTIFICACIONES DEL NAVEGADOR (D4.2)
-      - canNotify(): el navegador soporta Notification API?
-      - ensureNotifyPermission(): pide permiso
-      - fireNotification(): dispara notificación
-      - hasNotified()/markNotified(): evita duplicados
-      - runNotificationRules(): reglas (2h, 30m, check-in 48h)
-    ============================================================ */
     function canNotify() {
       return ("Notification" in window);
     }
@@ -889,11 +859,8 @@
     }
 
     function fireNotification(title, body) {
-      try {
-        new Notification(title, { body });
-      } catch (e) {
-        console.warn("Notification error:", e);
-      }
+      try { new Notification(title, { body }); }
+      catch (e) { console.warn("Notification error:", e); }
     }
 
     function notifiedKey(eventId, kind) {
@@ -907,10 +874,7 @@
     }
 
     async function runNotificationRules(events){
-      // Si el navegador no soporta, no hacemos nada
       if (!canNotify()) return;
-
-      // Solo notificamos si el usuario ya dio permiso
       if (Notification.permission !== "granted") return;
 
       const now = Date.now();
@@ -920,30 +884,23 @@
         if (!start) continue;
 
         const meta = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
-
-        // ✅ normaliza type para que "crucero/autobús" no rompa reglas
         const type = normalizeType(ev.type);
-
         const minsToStart = Math.round((start.getTime() - now) / 60000);
 
-        // (1) Notificación ~2h antes (ventana 10 min)
         if (minsToStart <= 120 && minsToStart > 110 && !hasNotified(ev.id, "reminder_2h")) {
           fireNotification("🕑 Próximo evento (2h)", `${ev.title || 'Evento'} — en ~2 horas`);
           markNotified(ev.id, "reminder_2h");
         }
 
-        // (2) Notificación ~30 min antes (ventana 10 min)
         if (minsToStart <= 30 && minsToStart > 20 && !hasNotified(ev.id, "reminder_30m")) {
           fireNotification("⏰ Próximo evento (30m)", `${ev.title || 'Evento'} — en ~30 minutos`);
           markNotified(ev.id, "reminder_30m");
         }
 
-        // (3) Notificación cuando abre check-in (ventana configurable, default 48h)
         if (type === "flight" && meta.checkin_url) {
           const windowHours = Number(meta.checkin_available_window_hours || 48);
           const windowMins = windowHours * 60;
 
-          // Ventana 20 min para capturarlo con un loop de 1 min
           if (minsToStart <= windowMins && minsToStart > (windowMins - 20) && !hasNotified(ev.id, "checkin_open")) {
             fireNotification("✅ Check-in disponible", `${ev.title || 'Vuelo'} — ya puedes hacer check-in`);
             markNotified(ev.id, "checkin_open");
@@ -952,11 +909,6 @@
       }
     }
 
-    /* ============================================================
-      ✅ UI: BOTÓN ACTIVAR NOTIFICACIONES
-      - paintNotifStatus(): actualiza texto/estado del botón
-      - onclick(): pide permiso y, si se activa, corre reglas “ya”
-    ============================================================ */
     const btnNotifs = document.getElementById("enableNotifs");
     const notifStatus = document.getElementById("notifStatus");
 
@@ -983,8 +935,6 @@
         notifStatus.textContent = "⚠️ No se pudieron activar (revisa permisos del navegador).";
       }
       paintNotifStatus();
-
-      // Si ya hay eventos cargados y ya hay permiso, dispara reglas ahora
       if (Notification.permission === "granted" && LAST_EVENTS.length) {
         runNotificationRules(LAST_EVENTS);
       }
@@ -992,16 +942,8 @@
 
     paintNotifStatus();
 
-    /* ============================================================
-      ✅ ALERTAS EN UI (D4.1) — chips dentro de la tarjeta
-      - Check-in disponible si faltan <= ventana (default 48h)
-      - Aviso “Salir al aeropuerto” si faltan <= 3h
-      (Estas son VISUALES, no notificación)
-    ============================================================ */
     function renderAlerts(event){
-      // normaliza type para ES/acentos
       const type = normalizeType(event.type);
-
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
       const start = toDate(event.start_time);
       if (!start) return '';
@@ -1032,20 +974,10 @@
       return alerts.length ? `<div class="alert-row">${alerts.join('')}</div>` : '';
     }
 
-    /* ============================================================
-      ✅ BADGES PRO (metadata)
-      - Pinta info de metadata por tipo (flight/hotel/activity/transfer)
-      - También agrega el badge de 📍 location con link a Google Maps
-      ✅ NUEVO:
-        - car/bus usan pickup/dropoff/company igual que transfer
-        - cruise muestra operator/cabin/reference si existen
-        - train (opcional) muestra company/reference si existen
-    ============================================================ */
     function renderProBadges(event){
       const meta = event.metadata;
       const badges = [];
 
-      // Location + link “Mapa”
       if (event.location) {
         const url = mapsUrlFromMetaOrLocation(meta, event.location);
         badges.push(
@@ -1056,7 +988,6 @@
         );
       }
 
-      // source como badge
       if (event.source) badges.push(`<span class="pro-badge"><strong>source:</strong> ${esc(event.source)}</span>`);
 
       if (!meta || typeof meta !== 'object') {
@@ -1124,8 +1055,101 @@
     }
 
     /* ============================================================
-      ✅ NUEVO (CRUD): REFERENCIAS A ELEMENTOS DEL MODAL
-      - Aquí guardamos los inputs para leer/escribir valores
+      ✅ FASE 2.2 (NUEVO): ESTADO FILTROS
+      - No rompe loadEvents: filtramos SOBRE dataClean antes de agrupar
+    ============================================================ */
+    const searchInput = document.getElementById('searchInput');
+    const typeFilter = document.getElementById('typeFilter');
+    let RANGE_FILTER = 'all'; // all | today | tomorrow | next7
+
+    function setActiveChip(range){
+      RANGE_FILTER = range;
+      document.querySelectorAll('.chip').forEach(ch => {
+        ch.classList.toggle('active', ch.dataset.range === range);
+      });
+      if (activeTripId) loadEvents(activeTripId);
+    }
+
+    document.querySelectorAll('.chip').forEach(ch => {
+      ch.onclick = () => setActiveChip(ch.dataset.range);
+    });
+
+    // debounce ligero para no recargar en cada tecla
+    let SEARCH_TIMER = null;
+    searchInput.addEventListener('input', () => {
+      if (SEARCH_TIMER) clearTimeout(SEARCH_TIMER);
+      SEARCH_TIMER = setTimeout(() => {
+        if (activeTripId) loadEvents(activeTripId);
+      }, 250);
+    });
+
+    typeFilter.addEventListener('change', () => {
+      if (activeTripId) loadEvents(activeTripId);
+    });
+
+    function dayKeyFromDate(d){
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
+    function buildSearchText(ev){
+      const parts = [];
+      parts.push(ev.title || '');
+      parts.push(ev.description || '');
+      parts.push(ev.location || '');
+      parts.push(ev.type || '');
+      try{
+        const meta = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
+        parts.push(JSON.stringify(meta));
+      }catch(e){}
+      return parts.join(' ').toLowerCase();
+    }
+
+    function eventMatchesFilters(ev){
+      // type filter
+      const tf = (typeFilter.value || '').trim();
+      if (tf){
+        const t = normalizeType(ev.type);
+        if (t !== tf) return false;
+      }
+
+      // search
+      const q = (searchInput.value || '').trim().toLowerCase();
+      if (q){
+        const hay = buildSearchText(ev);
+        if (!hay.includes(q)) return false;
+      }
+
+      // range filter
+      if (RANGE_FILTER !== 'all'){
+        const d = toDate(ev.start_time);
+        if (!d) return false; // "sin fecha" no entra en rangos
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startKey = dayKeyFromDate(startOfToday);
+
+        const evKey = dayKeyFromDate(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+
+        if (RANGE_FILTER === 'today'){
+          return evKey === startKey;
+        }
+
+        if (RANGE_FILTER === 'tomorrow'){
+          const tmr = new Date(startOfToday.getTime() + 24*60*60*1000);
+          return evKey === dayKeyFromDate(tmr);
+        }
+
+        if (RANGE_FILTER === 'next7'){
+          const ms = d.getTime() - startOfToday.getTime();
+          const days = Math.floor(ms / (24*60*60*1000));
+          return days >= 0 && days <= 6;
+        }
+      }
+
+      return true;
+    }
+
+    /* ============================================================
+      ✅ MODAL / CRUD (TU MISMA ESTRUCTURA)
     ============================================================ */
     const modalBackdrop = document.getElementById('modalBackdrop');
     const modalTitle = document.getElementById('modalTitle');
@@ -1152,12 +1176,6 @@
     const addEventBtn = document.getElementById('addEventBtn');
     const addTripBtn = document.getElementById('addTripBtn');
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): ESTADO DEL MODAL
-      - mode: "event" o "trip"
-      - editingEventId: si es null => estamos creando
-      - editingTripId: si es null => estamos creando
-    ============================================================ */
     let mode = "event";
     let editingEventId = null;
     let editingTripId = null;
@@ -1177,9 +1195,6 @@
       if (e.target === modalBackdrop) closeModal();
     });
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): SWITCH FORM (trip / event)
-    ============================================================ */
     function showTripForm(){
       mode = "trip";
       tripForm.classList.remove('hidden');
@@ -1191,9 +1206,6 @@
       tripForm.classList.add('hidden');
     }
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): LIMPIAR FORMS
-    ============================================================ */
     function resetEventForm(){
       f_title.value = '';
       f_type.value = 'activity';
@@ -1211,9 +1223,6 @@
       t_end.value = '';
     }
 
-    /* ============================================================
-      ✅ NUEVO (TRIPS CRUD): ABRIR MODAL PARA CREAR VIAJE
-    ============================================================ */
     addTripBtn.onclick = () => {
       editingTripId = null;
       modalTitle.textContent = 'Agregar viaje';
@@ -1224,10 +1233,6 @@
       openModal();
     };
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): ABRIR MODAL PARA CREAR EVENTO
-      - Requiere activeTripId (porque todo evento pertenece a un trip)
-    ============================================================ */
     addEventBtn.onclick = () => {
       if (!activeTripId) {
         alert('Primero selecciona un viaje.');
@@ -1243,10 +1248,6 @@
       openModal();
     };
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): ABRIR MODAL PARA EDITAR EVENTO (click en card)
-      - Cargamos valores del evento al formulario
-    ============================================================ */
     function openModalEditEvent(event){
       editingEventId = event.id;
 
@@ -1273,9 +1274,6 @@
       openModal();
     }
 
-    /* ============================================================
-      ✅ NUEVO (TRIPS CRUD): ABRIR MODAL PARA EDITAR VIAJE
-    ============================================================ */
     function openModalEditTrip(trip){
       editingTripId = trip.id;
 
@@ -1291,14 +1289,6 @@
       openModal();
     }
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): GUARDAR (EVENTS / TRIPS)
-      - Si mode === "event": INSERT/UPDATE en events
-      - Si mode === "trip": INSERT/UPDATE en trips
-      ✅ FIX CLAVE:
-      - Si llega solo "YYYY-MM-DD" (sin hora) => guardamos 09:00 default
-      - Si viene vacío => null ("Sin fecha")
-    ============================================================ */
     saveBtn.onclick = async () => {
       if (mode === "trip") {
         const title = t_title.value.trim();
@@ -1313,7 +1303,6 @@
           end_date: t_end.value || null
         };
 
-        // INSERT trip
         if (!editingTripId) {
           const { data, error } = await sb.from('trips').insert(payload).select('*').single();
           if (error) {
@@ -1329,7 +1318,6 @@
           return;
         }
 
-        // UPDATE trip
         const { error } = await sb.from('trips').update(payload).eq('id', editingTripId);
         if (error) {
           alert('Error al guardar viaje: ' + error.message);
@@ -1342,7 +1330,6 @@
         return;
       }
 
-      // ====== EVENT MODE ======
       if (!activeTripId) {
         alert('Primero selecciona un viaje.');
         return;
@@ -1354,10 +1341,6 @@
         return;
       }
 
-      // start_time robusto:
-      // - datetime-local normal: "YYYY-MM-DDTHH:MM" => ISO
-      // - caso raro: "YYYY-MM-DD" => ISO con 09:00
-      // - vacío => null (Sin fecha)
       const rawStart = (f_start.value || '').trim();
       let startIso = null;
 
@@ -1367,14 +1350,11 @@
         startIso = isoFromDateOnly(rawStart, "09:00");
       } else {
         startIso = fromLocalInputToIso(rawStart);
-        // Si por alguna razón falla, lo dejamos null
         if (!startIso) startIso = null;
       }
 
-      // order_index (opcional)
       const orderIndex = f_order.value === '' ? null : Number(f_order.value);
 
-      // metadata JSON (opcional)
       let metaObj = {};
       const metaRaw = f_meta.value.trim();
       if (metaRaw) {
@@ -1398,7 +1378,6 @@
         metadata: metaObj
       };
 
-      // INSERT event
       if (!editingEventId) {
         const { error } = await sb.from('events').insert(payload);
         if (error) {
@@ -1410,7 +1389,6 @@
         return;
       }
 
-      // UPDATE event
       const { error } = await sb.from('events').update(payload).eq('id', editingEventId);
       if (error) {
         alert('Error al guardar cambios: ' + error.message);
@@ -1421,11 +1399,6 @@
       loadEvents(activeTripId);
     };
 
-    /* ============================================================
-      ✅ NUEVO (CRUD): BORRAR (EVENTS / TRIPS)
-      - Si mode === "event": borra evento
-      - Si mode === "trip": borra viaje (opcional: borra eventos del viaje)
-    ============================================================ */
     deleteBtn.onclick = async () => {
       if (mode === "trip") {
         if (!editingTripId) return;
@@ -1433,8 +1406,6 @@
         const ok = confirm('¿Seguro que quieres borrar este viaje?');
         if (!ok) return;
 
-        // 🔥 OPCIONAL: borrar eventos del viaje antes (si no tienes cascade en BD)
-        // Si ya tienes ON DELETE CASCADE en events.trip_id, puedes comentar esto.
         const ok2 = confirm('¿También borrar TODOS los eventos de este viaje? (recomendado si no hay cascade)');
         if (ok2) {
           const delEvents = await sb.from('events').delete().eq('trip_id', editingTripId);
@@ -1457,7 +1428,6 @@
         return;
       }
 
-      // ====== EVENT MODE ======
       if (!editingEventId) return;
 
       const ok = confirm('¿Seguro que quieres borrar este evento? Esta acción no se puede deshacer.');
@@ -1473,11 +1443,6 @@
       loadEvents(activeTripId);
     };
 
-    /* ============================================================
-      ✅ CARGAR TRIPS
-      ✅ NUEVO (TRIPS CRUD):
-      - Botones editar/borrar dentro de la tarjeta (sin cambiar selección)
-    ============================================================ */
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -1522,7 +1487,6 @@
         delBtn.onclick = (e) => {
           e.stopPropagation();
           openModalEditTrip(trip);
-          // abre modal en modo editar viaje y el usuario puede borrar ahí
         };
 
         actions.appendChild(editBtn);
@@ -1549,21 +1513,11 @@
       }
     }
 
-    /* ============================================================
-      ✅ CARGAR EVENTS (timeline)
-      - lee events por trip
-      - ordena por order_index y start_time
-      - agrupa por día y pinta tarjetas
-      ✅ NUEVO:
-      - click en píldora del día => colapsa/expande
-      - persistencia por viaje (localStorage)
-    ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
       eventsDiv.classList.remove('muted');
       eventsDiv.innerHTML = 'Cargando timeline...';
 
-      // ✅ FASE 2.1: carga estado colapsado al entrar a un viaje
       loadCollapsedDays();
 
       const { data, error } = await sb
@@ -1583,15 +1537,21 @@
         return;
       }
 
-      // opcional anti-duplicados (si hubo carga doble)
       const dataClean = dedupeEvents(data);
 
-      LAST_EVENTS = dataClean;
+      // ✅ FASE 2.2: aplicar filtros sobre dataClean
+      const filtered = dataClean.filter(eventMatchesFilters);
+
+      LAST_EVENTS = filtered;
       startNotifLoop();
+      await runNotificationRules(filtered);
 
-      await runNotificationRules(dataClean);
+      if (!filtered.length){
+        eventsDiv.innerHTML = `<div class="empty">No hay eventos que coincidan con tus filtros/búsqueda.</div>`;
+        return;
+      }
 
-      const grouped = groupByDay(dataClean);
+      const grouped = groupByDay(filtered);
       const dayKeys = Array.from(grouped.keys()).sort((a,b) => {
         if (a === 'sin-fecha') return 1;
         if (b === 'sin-fecha') return -1;
@@ -1624,17 +1584,14 @@
         const pill = document.createElement('div');
         pill.className = 'day';
 
-        // ✅ estado colapsado
         const collapsed = isDayCollapsed(dayKey);
         if (collapsed) dayRow.classList.add('is-collapsed');
 
-        // ✅ caret
         const caret = document.createElement('span');
         caret.className = 'day-caret';
         caret.textContent = collapsed ? '▸' : '▾';
 
         const label = document.createElement('span');
-
         if (dayKey === 'sin-fecha') {
           label.textContent = 'Sin fecha';
         } else {
@@ -1643,11 +1600,9 @@
           label.textContent = formatDay(d);
         }
 
-        // pill = caret + label
         pill.appendChild(caret);
         pill.appendChild(label);
 
-        // ✅ click para colapsar/expandir
         pill.onclick = () => {
           toggleDayCollapsed(dayKey);
           const nowCollapsed = isDayCollapsed(dayKey);
@@ -1660,7 +1615,6 @@
         line.className = 'day-line';
         dayRow.appendChild(line);
 
-        // ✅ wrapper de eventos por día (para colapsar)
         const dayEventsWrap = document.createElement('div');
         dayEventsWrap.className = 'day-events';
 
@@ -1668,7 +1622,6 @@
         eventsDiv.appendChild(dayEventsWrap);
 
         for (const event of list) {
-          // normalización aplicada aquí también
           const type = normalizeType(event.type);
 
           const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
@@ -1707,19 +1660,12 @@
             </div>
           `;
 
-          // ✅ click para editar/borrar
           card.onclick = () => openModalEditEvent(event);
-
           dayEventsWrap.appendChild(card);
         }
       }
     }
 
-    /* ============================================================
-      ✅ AUTO-REFRESH (cada 2 min)
-      - refresca timeline del trip activo
-      - útil si hay cambios en BD mientras está abierto
-    ============================================================ */
     setInterval(() => {
       if (activeTripId) loadEvents(activeTripId);
     }, 2 * 60 * 1000);
