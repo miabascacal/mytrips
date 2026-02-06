@@ -2206,6 +2206,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           card.querySelectorAll('.qbtn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
               e.stopPropagation();
+              blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS; // ✅ bloquea abrir edición por un instante
 
               const action = btn.getAttribute('data-action');
               const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
