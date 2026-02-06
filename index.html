@@ -772,12 +772,16 @@
       - CLOSE_ON_BACKDROP_CLICK: evita cierres accidentales del modal al tocar fuera (mobile)
       - DEFAULT_TIME_IF_ONLY_DATE: hora por defecto cuando solo hay fecha
       - CARD_TAP_MAX_MOVE_PX: umbral para diferenciar scroll vs tap en tarjetas (evita “click sensible”)
+      - SHOW_DB_DEBUG: imprime en consola detalles de errores de Supabase (para diagnosticar RLS/policies)
+      - SHOW_RLS_HINTS: muestra un toast extra si detectamos bloqueo típico de RLS/policies
     ============================================================ */
     const REFRESH_MS = 5 * 60 * 1000;          // (5 min) cada cuánto refrescamos timeline automáticamente
     const NOTIF_LOOP_MS = 60 * 1000;           // (1 min) cada cuánto evaluamos reglas de notificación
     const CLOSE_ON_BACKDROP_CLICK = false;     // false = NO cerrar al tocar fondo (evita cierres accidentales)
     const DEFAULT_TIME_IF_ONLY_DATE = "09:00"; // hora por defecto si el usuario solo captura fecha
     const CARD_TAP_MAX_MOVE_PX = 10;           // si el dedo se mueve más, se asume scroll y no abre editar
+    const SHOW_DB_DEBUG = true;                // true = logs útiles en consola (Network/403/RLS)
+    const SHOW_RLS_HINTS = true;               // true = si huele a RLS, avisamos con explicación clara
 
     /* ============================================================
       ✅ D4.3: CACHE + LOOP DE NOTIFICACIONES (sin recargar)
@@ -830,6 +834,41 @@
       }catch(e){
         // fallback: si algo falla, usamos alert (para no “romper” flujo)
         try{ alert((title ? title + ': ' : '') + (msg || '')); }catch(_e){}
+      }
+    }
+
+    /* ============================================================
+      ✅ NUEVO: MEJOR DIAGNÓSTICO DE ERRORES (RLS / policies / 403)
+      - No cambia tu UX: solo te dice POR QUÉ no guardó
+    ============================================================ */
+    function looksLikeRLS(error){
+      const msg = String(error?.message || error || '').toLowerCase();
+      return (
+        msg.includes('row-level security') ||
+        msg.includes('rls') ||
+        msg.includes('permission') ||
+        msg.includes('not allowed') ||
+        msg.includes('violates') ||
+        msg.includes('policy') ||
+        msg.includes('403') ||
+        msg.includes('401')
+      );
+    }
+
+    function reportDbError(contextTitle, error){
+      const msg = String(error?.message || error || 'Error desconocido');
+      showToast('err', contextTitle, msg);
+
+      if (SHOW_RLS_HINTS && looksLikeRLS(error)){
+        showToast(
+          'warn',
+          'Posible bloqueo por RLS',
+          'Supabase está bloqueando UPDATE/DELETE por policies. Revisa RLS en la tabla (trips/events) y agrega policy de UPDATE.'
+        );
+      }
+
+      if (SHOW_DB_DEBUG){
+        console.error(`[MyTrips][DB] ${contextTitle}`, error);
       }
     }
 
@@ -1675,7 +1714,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         if (!editingTripId) {
           const { data, error } = await sb.from('trips').insert(payload).select('*').single();
           if (error) {
-            showToast('err', 'Crear viaje', error.message || 'Error al crear viaje.');
+            reportDbError('Crear viaje', error);
             return;
           }
           showToast('ok', 'Viaje creado', 'Listo. Ya puedes agregar eventos.');
@@ -1688,13 +1727,30 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           return;
         }
 
-        const { error } = await sb.from('trips').update(payload).eq('id', editingTripId);
+        /* ============================================================
+          ✅ NUEVO: UPDATE con select().single()
+          - Evita “fallos silenciosos”
+          - Si RLS/policy bloquea, aquí se ve el error real
+        ============================================================ */
+        const { data, error } = await sb
+          .from('trips')
+          .update(payload)
+          .eq('id', editingTripId)
+          .select('*')
+          .single();
+
         if (error) {
-          showToast('err', 'Guardar viaje', error.message || 'Error al guardar viaje.');
+          reportDbError('Guardar viaje', error);
           return;
         }
 
-        showToast('ok', 'Viaje actualizado', 'Cambios guardados.');
+        // ✅ Si por algún motivo no regresó data, lo reportamos como aviso
+        if (!data) {
+          showToast('warn', 'Guardar viaje', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
+        } else {
+          showToast('ok', 'Viaje actualizado', 'Cambios guardados.');
+        }
+
         closeModal();
         await loadTrips();
         if (activeTripId) await loadEvents(activeTripId);
@@ -1766,7 +1822,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       if (!editingEventId) {
         const { error } = await sb.from('events').insert(payload);
         if (error) {
-          showToast('err', 'Crear evento', error.message || 'Error al crear.');
+          reportDbError('Crear evento', error);
           return;
         }
         showToast('ok', 'Evento creado', 'Guardado correctamente.');
@@ -1775,13 +1831,29 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
-      const { error } = await sb.from('events').update(payload).eq('id', editingEventId);
+      /* ============================================================
+        ✅ NUEVO: UPDATE con select().single()
+        - Evita “fallos silenciosos”
+        - Si RLS/policy bloquea, aquí se ve el error real
+      ============================================================ */
+      const { data, error } = await sb
+        .from('events')
+        .update(payload)
+        .eq('id', editingEventId)
+        .select('*')
+        .single();
+
       if (error) {
-        showToast('err', 'Guardar evento', error.message || 'Error al guardar cambios.');
+        reportDbError('Guardar evento', error);
         return;
       }
 
-      showToast('ok', 'Evento actualizado', 'Cambios guardados.');
+      if (!data) {
+        showToast('warn', 'Guardar evento', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
+      } else {
+        showToast('ok', 'Evento actualizado', 'Cambios guardados.');
+      }
+
       closeModal();
       loadEvents(activeTripId);
     };
@@ -1797,14 +1869,14 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         if (ok2) {
           const delEvents = await sb.from('events').delete().eq('trip_id', editingTripId);
           if (delEvents.error) {
-            showToast('err', 'Borrar eventos', delEvents.error.message || 'Error al borrar eventos del viaje.');
+            reportDbError('Borrar eventos', delEvents.error);
             return;
           }
         }
 
         const { error } = await sb.from('trips').delete().eq('id', editingTripId);
         if (error) {
-          showToast('err', 'Borrar viaje', error.message || 'Error al borrar viaje.');
+          reportDbError('Borrar viaje', error);
           return;
         }
 
@@ -1823,7 +1895,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       const { error } = await sb.from('events').delete().eq('id', editingEventId);
       if (error) {
-        showToast('err', 'Borrar evento', error.message || 'Error al borrar.');
+        reportDbError('Borrar evento', error);
         return;
       }
 
@@ -1841,7 +1913,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (error) {
         tripsDiv.innerText = 'Error cargando viajes: ' + error.message;
-        showToast('err', 'Viajes', error.message || 'Error cargando viajes.');
+        reportDbError('Viajes', error);
         return;
       }
 
@@ -1929,7 +2001,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (error) {
         eventsDiv.innerText = 'Error cargando eventos: ' + error.message;
-        showToast('err', 'Eventos', error.message || 'Error cargando eventos.');
+        reportDbError('Eventos', error);
         return;
       }
 
