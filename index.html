@@ -126,6 +126,7 @@
     /* ============================================================
       ✅ ENCABEZADO DE DÍA EN TIMELINE
       - “Píldora” con fecha y línea horizontal
+      ✅ NUEVO: colapsable (cursor + icono)
     ============================================================ */
     .day-row{
       margin-top: 18px;
@@ -139,10 +140,22 @@
       border: 1px solid var(--border);
       border-radius: 999px;
       font-weight: 700;
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       font-size: 13px;
+      cursor: pointer;            /* ✅ NUEVO */
+      user-select: none;          /* ✅ NUEVO */
     }
+    .day:hover{ filter: brightness(0.98); } /* ✅ NUEVO */
+    .day-caret{ font-size: 12px; opacity: .75; } /* ✅ NUEVO */
     .day-line{ height: 1px; flex:1; background: var(--border); }
+
+    /* ✅ NUEVO: wrapper para eventos por día (para colapsar) */
+    .day-events{ margin-top: 6px; }
+
+    /* ✅ NUEVO: cuando está colapsado, ocultamos eventos */
+    .day-row.is-collapsed + .day-events{ display: none; }
 
     /* ============================================================
       ✅ TARJETA DE EVENTO
@@ -599,6 +612,45 @@
           runNotificationRules(LAST_EVENTS);
         }
       }, 60 * 1000);
+    }
+
+    /* ============================================================
+      ✅ FASE 2.1: COLAPSAR / EXPANDIR POR DÍA
+      - Guardamos estado por viaje en localStorage
+      - Click en la píldora del día: toggle
+    ============================================================ */
+    let COLLAPSED_DAYS = new Set();
+
+    function collapsedStorageKey(){
+      return `collapsedDays:${activeTripId || 'none'}`;
+    }
+
+    function loadCollapsedDays(){
+      COLLAPSED_DAYS = new Set();
+      if (!activeTripId) return;
+      try{
+        const raw = localStorage.getItem(collapsedStorageKey());
+        if (!raw) return;
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) arr.forEach(k => COLLAPSED_DAYS.add(String(k)));
+      }catch(e){}
+    }
+
+    function saveCollapsedDays(){
+      if (!activeTripId) return;
+      try{
+        localStorage.setItem(collapsedStorageKey(), JSON.stringify(Array.from(COLLAPSED_DAYS)));
+      }catch(e){}
+    }
+
+    function isDayCollapsed(dayKey){
+      return COLLAPSED_DAYS.has(dayKey);
+    }
+
+    function toggleDayCollapsed(dayKey){
+      if (COLLAPSED_DAYS.has(dayKey)) COLLAPSED_DAYS.delete(dayKey);
+      else COLLAPSED_DAYS.add(dayKey);
+      saveCollapsedDays();
     }
 
     /* ============================================================
@@ -1503,12 +1555,16 @@
       - ordena por order_index y start_time
       - agrupa por día y pinta tarjetas
       ✅ NUEVO:
-      - click en tarjeta => editar (openModalEditEvent)
+      - click en píldora del día => colapsa/expande
+      - persistencia por viaje (localStorage)
     ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
       eventsDiv.classList.remove('muted');
       eventsDiv.innerHTML = 'Cargando timeline...';
+
+      // ✅ FASE 2.1: carga estado colapsado al entrar a un viaje
+      loadCollapsedDays();
 
       const { data, error } = await sb
         .from('events')
@@ -1568,19 +1624,48 @@
         const pill = document.createElement('div');
         pill.className = 'day';
 
+        // ✅ estado colapsado
+        const collapsed = isDayCollapsed(dayKey);
+        if (collapsed) dayRow.classList.add('is-collapsed');
+
+        // ✅ caret
+        const caret = document.createElement('span');
+        caret.className = 'day-caret';
+        caret.textContent = collapsed ? '▸' : '▾';
+
+        const label = document.createElement('span');
+
         if (dayKey === 'sin-fecha') {
-          pill.textContent = 'Sin fecha';
+          label.textContent = 'Sin fecha';
         } else {
           const parts = dayKey.split('-');
           const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-          pill.textContent = formatDay(d);
+          label.textContent = formatDay(d);
         }
+
+        // pill = caret + label
+        pill.appendChild(caret);
+        pill.appendChild(label);
+
+        // ✅ click para colapsar/expandir
+        pill.onclick = () => {
+          toggleDayCollapsed(dayKey);
+          const nowCollapsed = isDayCollapsed(dayKey);
+          caret.textContent = nowCollapsed ? '▸' : '▾';
+          dayRow.classList.toggle('is-collapsed', nowCollapsed);
+        };
 
         dayRow.appendChild(pill);
         const line = document.createElement('div');
         line.className = 'day-line';
         dayRow.appendChild(line);
+
+        // ✅ wrapper de eventos por día (para colapsar)
+        const dayEventsWrap = document.createElement('div');
+        dayEventsWrap.className = 'day-events';
+
         eventsDiv.appendChild(dayRow);
+        eventsDiv.appendChild(dayEventsWrap);
 
         for (const event of list) {
           // normalización aplicada aquí también
@@ -1625,7 +1710,7 @@
           // ✅ click para editar/borrar
           card.onclick = () => openModalEditEvent(event);
 
-          eventsDiv.appendChild(card);
+          dayEventsWrap.appendChild(card);
         }
       }
     }
