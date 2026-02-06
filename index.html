@@ -97,11 +97,30 @@
       background: #fff;
       box-shadow: 0 2px 10px rgba(0,0,0,0.03);
       transition: transform .05s ease-in-out;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap: 10px;
     }
     .trip:hover{ transform: translateY(-1px); }
     .trip.active{
       border-color: #c7d2fe;
       background: #f5f7ff;
+    }
+    .trip-actions{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex: 0 0 auto;
+    }
+    .icon-btn{
+      border: 1px solid var(--border);
+      background:#fff;
+      border-radius: 10px;
+      padding: 6px 8px;
+      cursor:pointer;
+      font-weight: 700;
+      font-size: 12px;
     }
 
     /* ============================================================
@@ -282,6 +301,14 @@
       opacity: .6;
       cursor: not-allowed;
     }
+    .btn.primary{
+      background: #111;
+      color: #fff;
+      border-color: #111;
+    }
+    .btn.danger{
+      border-color: rgba(239,68,68,.55);
+    }
     .hint{
       font-size: 12px;
       color: var(--muted);
@@ -290,6 +317,8 @@
     /* ============================================================
       ✅ NUEVO (CRUD): MODAL + FORM
       - Se usa para Agregar / Editar / Borrar eventos
+      ✅ NUEVO (TRIPS CRUD):
+      - Se reutiliza el mismo modal cambiando campos
     ============================================================ */
     .modal-backdrop{
       position: fixed;
@@ -360,20 +389,13 @@
       border-top: 1px solid var(--border);
       flex-wrap: wrap;
     }
-    .btn.primary{
-      background: #111;
-      color: #fff;
-      border-color: #111;
-    }
-    .btn.danger{
-      border-color: rgba(239,68,68,.55);
-    }
     .modal-hint{
       font-size: 12px;
       color: var(--muted);
       margin-top: 8px;
       line-height: 1.35;
     }
+    .hidden{ display:none !important; }
   </style>
 </head>
 
@@ -386,6 +408,8 @@
     ✅ NUEVO (CRUD):
     - botón "Agregar evento"
     - modal para agregar/editar/borrar
+    ✅ NUEVO (TRIPS CRUD):
+    - Agregar viaje / editar nombre / borrar viaje
   ============================================================ -->
   <div class="container">
     <div class="header">
@@ -394,6 +418,13 @@
     </div>
 
     <h2>Mis viajes</h2>
+
+    <!-- ✅ NUEVO (TRIPS CRUD): toolbar -->
+    <div class="toolbar">
+      <button id="addTripBtn" class="btn">➕ Agregar viaje</button>
+      <span class="hint">Tip: selecciona un viaje para ver su timeline.</span>
+    </div>
+
     <div id="trips" class="muted">Cargando viajes...</div>
 
     <h2>Timeline</h2>
@@ -413,80 +444,115 @@
   </div>
 
   <!-- ============================================================
-    ✅ NUEVO (CRUD): MODAL
-    - Reutilizable para agregar/editar
-    - También incluye botón eliminar cuando estás editando
+    ✅ MODAL ÚNICO (EVENTS + TRIPS)
+    - Reutilizable para:
+      (A) agregar/editar/borrar evento
+      (B) agregar/editar/borrar viaje
   ============================================================ -->
   <div id="modalBackdrop" class="modal-backdrop">
     <div class="modal">
       <div class="modal-head">
-        <strong id="modalTitle">Agregar evento</strong>
+        <strong id="modalTitle">Agregar</strong>
         <button id="closeModalBtn" class="btn">✖</button>
       </div>
 
       <div class="modal-body">
-        <div class="grid">
-          <div class="field">
-            <label>Título</label>
-            <input id="f_title" placeholder="Ej. Vuelo CDMX → París" />
+
+        <!-- ============================================================
+          ✅ FORM TRIP (solo título + fechas)
+        ============================================================ -->
+        <div id="tripForm" class="hidden">
+          <div class="grid">
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Nombre del viaje (title)</label>
+              <input id="t_title" placeholder="Ej. Viaje a Egipto" />
+            </div>
+
+            <div class="field">
+              <label>Fecha inicio (start_date)</label>
+              <input id="t_start" type="date" />
+            </div>
+
+            <div class="field">
+              <label>Fecha fin (end_date)</label>
+              <input id="t_end" type="date" />
+            </div>
           </div>
 
-          <div class="field">
-            <label>Tipo (type)</label>
-            <select id="f_type">
-              <option value="flight">flight</option>
-              <option value="hotel">hotel</option>
-              <option value="activity">activity</option>
-              <option value="transfer">transfer</option>
-              <option value="cruise">cruise</option>
-              <option value="car">car</option>
-              <option value="bus">bus</option>
-              <option value="train">train</option>
-              <option value="other">other</option>
-            </select>
+          <div class="modal-hint">
+            - Si no tienes fechas, puedes dejarlas vacías. <br/>
+            - Para ordenar tus viajes, se usa start_date (si existe).
           </div>
+        </div>
 
-          <div class="field">
-            <label>Fecha/Hora inicio (start_time)</label>
-            <input id="f_start" type="datetime-local" />
-          </div>
+        <!-- ============================================================
+          ✅ FORM EVENT (tu modal original)
+        ============================================================ -->
+        <div id="eventForm">
+          <div class="grid">
+            <div class="field">
+              <label>Título</label>
+              <input id="f_title" placeholder="Ej. Vuelo CDMX → París" />
+            </div>
 
-          <div class="field">
-            <label>Orden (order_index)</label>
-            <input id="f_order" type="number" placeholder="Ej. 10" />
-          </div>
+            <div class="field">
+              <label>Tipo (type)</label>
+              <select id="f_type">
+                <option value="flight">flight</option>
+                <option value="hotel">hotel</option>
+                <option value="activity">activity</option>
+                <option value="transfer">transfer</option>
+                <option value="cruise">cruise</option>
+                <option value="car">car</option>
+                <option value="bus">bus</option>
+                <option value="train">train</option>
+                <option value="other">other</option>
+              </select>
+            </div>
 
-          <div class="field">
-            <label>Ubicación (location)</label>
-            <input id="f_location" placeholder="Ej. Aeropuerto CDMX T1" />
-          </div>
+            <div class="field">
+              <label>Fecha/Hora inicio (start_time)</label>
+              <input id="f_start" type="datetime-local" />
+            </div>
 
-          <div class="field">
-            <label>Fuente (source)</label>
-            <select id="f_source">
-              <option value="manual">manual</option>
-              <option value="email">email</option>
-              <option value="pdf">pdf</option>
-              <option value="whatsapp">whatsapp</option>
-              <option value="other">other</option>
-            </select>
-          </div>
+            <div class="field">
+              <label>Orden (order_index)</label>
+              <input id="f_order" type="number" placeholder="Ej. 10" />
+            </div>
 
-          <div class="field" style="grid-column: 1 / -1;">
-            <label>Descripción</label>
-            <input id="f_desc" placeholder="Notas rápidas, documentos, recomendaciones, etc." />
-          </div>
+            <div class="field">
+              <label>Ubicación (location)</label>
+              <input id="f_location" placeholder="Ej. Aeropuerto CDMX T1" />
+            </div>
 
-          <div class="field" style="grid-column: 1 / -1;">
-            <label>Metadata (JSON)</label>
-            <textarea id="f_meta" placeholder='Ej: {"airline":"AirFrance","flight_number":"AF0175","checkin_url":"https://..."}'></textarea>
-            <div class="modal-hint">
-              - Debe ser JSON válido. <br/>
-              - Si lo dejas vacío, se guarda como {}. <br/>
-              - Puedes usarlo para: airline, flight_number, seat, documents, checkin_url, booking_url, coords, etc.
+            <div class="field">
+              <label>Fuente (source)</label>
+              <select id="f_source">
+                <option value="manual">manual</option>
+                <option value="email">email</option>
+                <option value="pdf">pdf</option>
+                <option value="whatsapp">whatsapp</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Descripción</label>
+              <input id="f_desc" placeholder="Notas rápidas, documentos, recomendaciones, etc." />
+            </div>
+
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Metadata (JSON)</label>
+              <textarea id="f_meta" placeholder='Ej: {"airline":"AirFrance","flight_number":"AF0175","checkin_url":"https://..."}'></textarea>
+              <div class="modal-hint">
+                - Debe ser JSON válido. <br/>
+                - Si lo dejas vacío, se guarda como {}. <br/>
+                - Puedes usarlo para: airline, flight_number, seat, documents, checkin_url, booking_url, coords, etc.
+              </div>
             </div>
           </div>
         </div>
+
       </div>
 
       <div class="modal-actions">
@@ -556,7 +622,7 @@
       ✅ NUEVO (mejora agrupada #1): Normalización ES → EN
       - Para que si en BD viene "crucero/automovil/autobus" también matchee
       - Incluye soporte de acentos (autobús/automóvil)
-      ✅ FIX: te faltaba una coma antes de "tren"
+      ✅ FIX: coma antes de "tren"
     ============================================================ */
     const TYPE_ALIASES = {
       crucero: 'cruise',
@@ -611,21 +677,35 @@
       - toDate(): convierte timestamps de Supabase a Date()
       - formatDay(): formatea fecha en español
       - formatTime(): formatea hora HH:MM
+      ✅ FIX: toDate robusto para no mandar eventos a "Sin fecha"
     ============================================================ */
     function toDate(value) {
       if (!value) return null;
-      const clean = String(value).replace('Z','');
-      const parts = clean.split(/[-T:.]/);
 
-      const d = new Date(
-        Number(parts[0]),
-        Number(parts[1]) - 1,
-        Number(parts[2]),
-        Number(parts[3] || 0),
-        Number(parts[4] || 0)
-      );
-      if (isNaN(d.getTime())) return null;
-      return d;
+      const s = String(value).trim();
+
+      // ISO: 2026-02-16T16:00:00Z / 2026-02-16T16:00
+      const iso = s.replace('Z','');
+      if (/^\d{4}-\d{2}-\d{2}T/.test(iso)){
+        const parts = iso.split(/[-T:.]/);
+        const d = new Date(
+          Number(parts[0]),
+          Number(parts[1]) - 1,
+          Number(parts[2]),
+          Number(parts[3] || 0),
+          Number(parts[4] || 0)
+        );
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // Si llegara algo tipo "2026-02-16" (solo fecha), lo interpretamos como 09:00
+      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)){
+        const parts = iso.split('-');
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 9, 0);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      return null;
     }
 
     function formatDay(d) {
@@ -640,6 +720,7 @@
       ✅ NUEVO (CRUD): helper para input datetime-local
       - fromIsoToLocalInput(): ISO -> "YYYY-MM-DDTHH:MM"
       - fromLocalInputToIso(): "YYYY-MM-DDTHH:MM" -> ISO
+      ✅ FIX: si el usuario NO pone hora, guardamos 09:00 para no ir a "Sin fecha"
     ============================================================ */
     function fromIsoToLocalInput(iso){
       const d = toDate(iso);
@@ -659,6 +740,14 @@
       const d = new Date(localStr);
       if (isNaN(d.getTime())) return null;
       return d.toISOString();
+    }
+
+    function isoFromDateOnly(dateStr, defaultHHMM = "09:00"){
+      // dateStr: "YYYY-MM-DD"
+      if (!dateStr) return null;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+      const local = `${dateStr}T${defaultHHMM}`;
+      return fromLocalInputToIso(local);
     }
 
     /* ============================================================
@@ -993,6 +1082,13 @@
     const saveBtn = document.getElementById('saveBtn');
     const deleteBtn = document.getElementById('deleteBtn');
 
+    const tripForm = document.getElementById('tripForm');
+    const eventForm = document.getElementById('eventForm');
+
+    const t_title = document.getElementById('t_title');
+    const t_start = document.getElementById('t_start');
+    const t_end = document.getElementById('t_end');
+
     const f_title = document.getElementById('f_title');
     const f_type = document.getElementById('f_type');
     const f_start = document.getElementById('f_start');
@@ -1003,13 +1099,17 @@
     const f_meta = document.getElementById('f_meta');
 
     const addEventBtn = document.getElementById('addEventBtn');
+    const addTripBtn = document.getElementById('addTripBtn');
 
     /* ============================================================
       ✅ NUEVO (CRUD): ESTADO DEL MODAL
+      - mode: "event" o "trip"
       - editingEventId: si es null => estamos creando
-      - si tiene valor => estamos editando ese evento (update/delete)
+      - editingTripId: si es null => estamos creando
     ============================================================ */
+    let mode = "event";
     let editingEventId = null;
+    let editingTripId = null;
 
     function openModal(){
       modalBackdrop.style.display = 'flex';
@@ -1017,6 +1117,8 @@
     function closeModal(){
       modalBackdrop.style.display = 'none';
       editingEventId = null;
+      editingTripId = null;
+      mode = "event";
     }
 
     closeModalBtn.onclick = closeModal;
@@ -1025,10 +1127,23 @@
     });
 
     /* ============================================================
-      ✅ NUEVO (CRUD): LIMPIAR FORM
-      - Lo usamos al crear evento nuevo
+      ✅ NUEVO (CRUD): SWITCH FORM (trip / event)
     ============================================================ */
-    function resetForm(){
+    function showTripForm(){
+      mode = "trip";
+      tripForm.classList.remove('hidden');
+      eventForm.classList.add('hidden');
+    }
+    function showEventForm(){
+      mode = "event";
+      eventForm.classList.remove('hidden');
+      tripForm.classList.add('hidden');
+    }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): LIMPIAR FORMS
+    ============================================================ */
+    function resetEventForm(){
       f_title.value = '';
       f_type.value = 'activity';
       f_start.value = '';
@@ -1039,8 +1154,27 @@
       f_meta.value = '';
     }
 
+    function resetTripForm(){
+      t_title.value = '';
+      t_start.value = '';
+      t_end.value = '';
+    }
+
     /* ============================================================
-      ✅ NUEVO (CRUD): ABRIR MODAL PARA CREAR
+      ✅ NUEVO (TRIPS CRUD): ABRIR MODAL PARA CREAR VIAJE
+    ============================================================ */
+    addTripBtn.onclick = () => {
+      editingTripId = null;
+      modalTitle.textContent = 'Agregar viaje';
+      deleteBtn.style.display = 'none';
+      saveBtn.textContent = '💾 Guardar';
+      resetTripForm();
+      showTripForm();
+      openModal();
+    };
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): ABRIR MODAL PARA CREAR EVENTO
       - Requiere activeTripId (porque todo evento pertenece a un trip)
     ============================================================ */
     addEventBtn.onclick = () => {
@@ -1053,15 +1187,16 @@
       deleteBtn.style.display = 'none';
       saveBtn.textContent = '💾 Guardar';
 
-      resetForm();
+      resetEventForm();
+      showEventForm();
       openModal();
     };
 
     /* ============================================================
-      ✅ NUEVO (CRUD): ABRIR MODAL PARA EDITAR (click en card)
+      ✅ NUEVO (CRUD): ABRIR MODAL PARA EDITAR EVENTO (click en card)
       - Cargamos valores del evento al formulario
     ============================================================ */
-    function openModalEdit(event){
+    function openModalEditEvent(event){
       editingEventId = event.id;
 
       modalTitle.textContent = 'Editar evento';
@@ -1069,14 +1204,13 @@
       saveBtn.textContent = '💾 Guardar cambios';
 
       f_title.value = event.title || '';
-      f_type.value = normalizeType(event.type || 'other'); // UI muestra normalizado
+      f_type.value = normalizeType(event.type || 'other');
       f_start.value = fromIsoToLocalInput(event.start_time);
       f_order.value = (event.order_index ?? '') === null ? '' : String(event.order_index ?? '');
       f_location.value = event.location || '';
       f_source.value = event.source || 'manual';
       f_desc.value = event.description || '';
 
-      // Metadata: lo mostramos como JSON bonito
       try {
         const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
         f_meta.value = JSON.stringify(meta, null, 2);
@@ -1084,15 +1218,78 @@
         f_meta.value = '';
       }
 
+      showEventForm();
       openModal();
     }
 
     /* ============================================================
-      ✅ NUEVO (CRUD): GUARDAR (INSERT/UPDATE)
-      - Si editingEventId es null => INSERT
-      - Si tiene id => UPDATE
+      ✅ NUEVO (TRIPS CRUD): ABRIR MODAL PARA EDITAR VIAJE
+    ============================================================ */
+    function openModalEditTrip(trip){
+      editingTripId = trip.id;
+
+      modalTitle.textContent = 'Editar viaje';
+      deleteBtn.style.display = 'inline-block';
+      saveBtn.textContent = '💾 Guardar cambios';
+
+      t_title.value = trip.title || '';
+      t_start.value = trip.start_date ? String(trip.start_date).slice(0,10) : '';
+      t_end.value = trip.end_date ? String(trip.end_date).slice(0,10) : '';
+
+      showTripForm();
+      openModal();
+    }
+
+    /* ============================================================
+      ✅ NUEVO (CRUD): GUARDAR (EVENTS / TRIPS)
+      - Si mode === "event": INSERT/UPDATE en events
+      - Si mode === "trip": INSERT/UPDATE en trips
+      ✅ FIX: fecha sin hora -> guardamos 09:00
     ============================================================ */
     saveBtn.onclick = async () => {
+      if (mode === "trip") {
+        const title = t_title.value.trim();
+        if (!title) {
+          alert('El nombre del viaje es obligatorio.');
+          return;
+        }
+
+        const payload = {
+          title,
+          start_date: t_start.value || null,
+          end_date: t_end.value || null
+        };
+
+        // INSERT trip
+        if (!editingTripId) {
+          const { data, error } = await sb.from('trips').insert(payload).select('*').single();
+          if (error) {
+            alert('Error al crear viaje: ' + error.message);
+            return;
+          }
+          closeModal();
+          await loadTrips();
+          if (data?.id) {
+            activeTripId = data.id;
+            await loadEvents(activeTripId);
+          }
+          return;
+        }
+
+        // UPDATE trip
+        const { error } = await sb.from('trips').update(payload).eq('id', editingTripId);
+        if (error) {
+          alert('Error al guardar viaje: ' + error.message);
+          return;
+        }
+
+        closeModal();
+        await loadTrips();
+        if (activeTripId) await loadEvents(activeTripId);
+        return;
+      }
+
+      // ====== EVENT MODE ======
       if (!activeTripId) {
         alert('Primero selecciona un viaje.');
         return;
@@ -1104,8 +1301,13 @@
         return;
       }
 
-      // start_time
-      const startIso = fromLocalInputToIso(f_start.value);
+      // start_time (si el usuario no pone hora, guardamos 09:00)
+      let startIso = fromLocalInputToIso(f_start.value);
+      if (!startIso) {
+        // Si no puso nada, lo dejamos null (irá a "Sin fecha")
+        // Si quieres obligar fecha, aquí sería el lugar.
+        startIso = null;
+      }
 
       // order_index (opcional)
       const orderIndex = f_order.value === '' ? null : Number(f_order.value);
@@ -1122,9 +1324,6 @@
         }
       }
 
-      // IMPORTANTE:
-      // - type se guarda “tal cual” del selector (ya en EN).
-      // - Si el usuario escribe "Autobús" manualmente en BD, tu normalización lo soporta.
       const payload = {
         trip_id: activeTripId,
         title,
@@ -1137,7 +1336,13 @@
         metadata: metaObj
       };
 
-      // INSERT
+      // ✅ FIX: si viene solo fecha (algunos navegadores raros), normalizamos
+      // - datetime-local normalmente siempre trae hora, pero por seguridad:
+      if (f_start.value && /^\d{4}-\d{2}-\d{2}$/.test(f_start.value)) {
+        payload.start_time = isoFromDateOnly(f_start.value, "09:00");
+      }
+
+      // INSERT event
       if (!editingEventId) {
         const { error } = await sb.from('events').insert(payload);
         if (error) {
@@ -1149,7 +1354,7 @@
         return;
       }
 
-      // UPDATE
+      // UPDATE event
       const { error } = await sb.from('events').update(payload).eq('id', editingEventId);
       if (error) {
         alert('Error al guardar cambios: ' + error.message);
@@ -1161,10 +1366,42 @@
     };
 
     /* ============================================================
-      ✅ NUEVO (CRUD): BORRAR
-      - Solo disponible cuando editas un evento
+      ✅ NUEVO (CRUD): BORRAR (EVENTS / TRIPS)
+      - Si mode === "event": borra evento
+      - Si mode === "trip": borra viaje (opcional: borra eventos del viaje)
     ============================================================ */
     deleteBtn.onclick = async () => {
+      if (mode === "trip") {
+        if (!editingTripId) return;
+
+        const ok = confirm('¿Seguro que quieres borrar este viaje?');
+        if (!ok) return;
+
+        // 🔥 OPCIONAL: borrar eventos del viaje antes (si no tienes cascade en BD)
+        // Si ya tienes ON DELETE CASCADE en events.trip_id, puedes comentar esto.
+        const ok2 = confirm('¿También borrar TODOS los eventos de este viaje? (recomendado si no hay cascade)');
+        if (ok2) {
+          const delEvents = await sb.from('events').delete().eq('trip_id', editingTripId);
+          if (delEvents.error) {
+            alert('Error al borrar eventos del viaje: ' + delEvents.error.message);
+            return;
+          }
+        }
+
+        const { error } = await sb.from('trips').delete().eq('id', editingTripId);
+        if (error) {
+          alert('Error al borrar viaje: ' + error.message);
+          return;
+        }
+
+        closeModal();
+        activeTripId = null;
+        await loadTrips();
+        document.getElementById('events').innerHTML = `<div class="muted">Selecciona un viaje para ver su timeline.</div>`;
+        return;
+      }
+
+      // ====== EVENT MODE ======
       if (!editingEventId) return;
 
       const ok = confirm('¿Seguro que quieres borrar este evento? Esta acción no se puede deshacer.');
@@ -1182,6 +1419,8 @@
 
     /* ============================================================
       ✅ CARGAR TRIPS
+      ✅ NUEVO (TRIPS CRUD):
+      - Botones editar/borrar dentro de la tarjeta (sin cambiar selección)
     ============================================================ */
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
@@ -1206,7 +1445,35 @@
       data.forEach(trip => {
         const div = document.createElement('div');
         div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
-        div.innerHTML = `<strong>${esc(trip.title)}</strong>`;
+
+        const left = document.createElement('div');
+        left.innerHTML = `<strong>${esc(trip.title)}</strong>`;
+
+        const actions = document.createElement('div');
+        actions.className = 'trip-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'icon-btn';
+        editBtn.textContent = '✏️ Editar';
+        editBtn.onclick = (e) => {
+          e.stopPropagation();
+          openModalEditTrip(trip);
+        };
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'icon-btn';
+        delBtn.textContent = '🗑️ Borrar';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          openModalEditTrip(trip);
+          // abre modal en modo editar viaje y el usuario puede borrar ahí
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+
+        div.appendChild(left);
+        div.appendChild(actions);
 
         div.onclick = () => {
           activeTripId = trip.id;
@@ -1232,7 +1499,7 @@
       - ordena por order_index y start_time
       - agrupa por día y pinta tarjetas
       ✅ NUEVO:
-      - click en tarjeta => editar (openModalEdit)
+      - click en tarjeta => editar (openModalEditEvent)
     ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
@@ -1351,8 +1618,8 @@
             </div>
           `;
 
-          // ✅ NUEVO: click para editar/borrar
-          card.onclick = () => openModalEdit(event);
+          // ✅ click para editar/borrar
+          card.onclick = () => openModalEditEvent(event);
 
           eventsDiv.appendChild(card);
         }
