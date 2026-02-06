@@ -585,7 +585,8 @@
     <div class="toolbar">
       <button id="addTripBtn" class="btn" data-action="open-add-trip">➕ Agregar viaje</button>
       <button id="installPwaBtn" class="btn" data-action="pwa-install" title="Instala la app en tu celular/desktop">📲 Instalar</button>
-      <span class="hint">Tip: selecciona un viaje para ver su timeline.</span>
+      <button id="clearTripBtn" class="btn" data-action="clear-trip" title="Oculta el timeline hasta seleccionar un viaje">🧹 Ocultar timeline</button>
+      <span class="hint">Tip: selecciona un viaje para ver su timeline. (Puedes “deseleccionar” el viaje con el botón de Ocultar.)</span>
     </div>
 
     <div id="trips" class="muted">Cargando viajes...</div>
@@ -805,6 +806,9 @@
     const SHOW_DB_DEBUG = true;                // true = logs útiles en consola (Network/403/RLS)
     const SHOW_RLS_HINTS = true;               // true = si huele a RLS, avisamos con explicación clara
 
+    const LAST_TRIP_STORAGE_KEY = 'mytrips:lastActiveTripId'; // ✅ NUEVO: recuerda selección (o ausencia) del viaje
+    const AUTO_SELECT_FIRST_TRIP = true; // ✅ NUEVO: si no hay viaje guardado, selecciona el primero automáticamente
+
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
       - Para push real con service worker: siguiente paso (archivo sw.js)
@@ -829,6 +833,11 @@
           runNotificationRules(LAST_EVENTS);
         }
       }, NOTIF_LOOP_MS);
+    }
+
+    function stopNotifLoop(){
+      if (NOTIF_TIMER) clearInterval(NOTIF_TIMER);
+      NOTIF_TIMER = null;
     }
 
     /* ============================================================
@@ -894,7 +903,7 @@
         showToast(
           'warn',
           'Posible bloqueo por RLS',
-          'Supabase está bloqueando UPDATE/DELETE por policies. Revisa RLS en la tabla (trips/events) y agrega policy de UPDATE.'
+          'Supabase está bloqueando UPDATE/DELETE por policies. Revisa RLS en la tabla (trips/events) y agrega policy de UPDATE/DELETE.'
         );
       }
 
@@ -904,33 +913,37 @@
     }
 
     /* ============================================================
-      ✅ FIX DEFINITIVO: CLICK ROUTER (NUEVO)
-      - Captura TODOS los clicks con data-action sin depender de onclick suelto.
-      - Evita que overlays “se coman” el click.
+      ✅ FIX CRÍTICO: CLICK ROUTER (ARREGLADO)
+      - Antes “rompía” los botones rápidos (Mapa/Link/Copiar) porque
+        también usaban data-action. Ahora:
+        1) SOLO maneja acciones de TOOLBAR/HEADER (botones .btn)
+        2) NO hace recursion con .click()
     ============================================================ */
     document.addEventListener('click', async (e) => {
       const el = e.target.closest('[data-action]');
       if (!el) return;
 
-      // Nota: solo actuamos si data-action existe; no rompemos otros clicks
+      // ✅ Evitar capturar los botones rápidos dentro de tarjetas
+      // (los quick actions se manejan por listeners propios del card)
+      if (el.closest('.quick-actions')) return;
+
       const action = String(el.getAttribute('data-action') || '').trim();
       if (!action) return;
 
-      // Evita que se “doble ejecute” (más robusto)
       e.preventDefault();
       e.stopPropagation();
 
       switch (action) {
         case 'open-add-trip':
-          document.getElementById('addTripBtn')?.click();
+          handleOpenAddTrip();
           break;
 
         case 'open-add-event':
-          document.getElementById('addEventBtn')?.click();
+          handleOpenAddEvent();
           break;
 
         case 'enable-notifs':
-          document.getElementById('enableNotifs')?.click();
+          await handleEnableNotifs();
           break;
 
         case 'export-ics':
@@ -953,6 +966,10 @@
           shareViaTelegram();
           break;
 
+        case 'clear-trip':
+          clearActiveTripSelection(true);
+          break;
+
         default:
           console.warn('Acción no mapeada:', action);
       }
@@ -960,9 +977,6 @@
 
     /* ============================================================
       ✅ FASE 1 (NUEVO): IMPORTACIÓN RÁPIDA (Excel + PDFs)
-      - Excel: lee filas y crea eventos en Supabase
-      - PDFs: se guardan como “lista” en metadata (por ahora)
-      - OCR real y auto-completado: siguiente paso con n8n/OpenAI
     ============================================================ */
     const excelInput = document.getElementById('excelInput');
     const pdfInput = document.getElementById('pdfInput');
@@ -972,7 +986,6 @@
         showToast('warn', 'Importar', 'Primero selecciona un viaje.');
         return;
       }
-      // 1) Excel
       excelInput.value = '';
       pdfInput.value = '';
       excelInput.click();
@@ -990,12 +1003,10 @@
     }
 
     function parsePossibleDateTime(row){
-      // Soporta columnas típicas: date, time, start_time, datetime, fecha, hora
       const get = (k) => row[k] ?? row[k?.toUpperCase?.()] ?? row[k?.toLowerCase?.()] ?? null;
 
       const dt = get('start_time') || get('datetime') || get('fecha_hora') || null;
       if (dt){
-        // si ya viene ISO o local, intentamos new Date()
         const d = new Date(dt);
         if (!isNaN(d.getTime())) return d.toISOString();
       }
@@ -1033,7 +1044,6 @@
         return;
       }
 
-      // Import “tolerante”: buscamos columnas comunes
       const created = [];
       for (const r of rows){
         const title = (r.title || r.titulo || r.Título || r.TITULO || r.Titulo || '').toString().trim()
@@ -1072,19 +1082,15 @@
         const { error } = await sb.from('events').insert(payload);
         if (error){
           reportDbError('Importar Excel (insert event)', error);
-          // seguimos importando lo demás
         } else {
           created.push(title);
         }
       }
 
       showToast('ok', 'Importar Excel', `Listo. Importados: ${created.length} evento(s). Ahora selecciona PDFs (si aplica).`);
-      // después del Excel, pedimos PDFs
       pdfInput.click();
     }
 
-    // PDFs: por ahora solo guardamos nombres en un “adjuntos” temporal por viaje.
-    // Para OCR y extracción automática -> siguiente paso con n8n/OpenAI.
     async function importPdfFiles(files){
       const list = Array.from(files || []);
       if (!list.length){
@@ -1094,7 +1100,6 @@
       }
 
       const names = list.map(f => ({ name: f.name, size: f.size }));
-      // guardamos en localStorage como staging (sin storage backend aún)
       const key = `pdfStaging:${activeTripId}`;
       try{
         localStorage.setItem(key, JSON.stringify(names));
@@ -1116,7 +1121,6 @@
 
     /* ============================================================
       ✅ FASE 1 (NUEVO): EXPORT .ICS (calendario)
-      - Genera un archivo .ics desde LAST_EVENTS (o recarga si hace falta)
     ============================================================ */
     function pad2(n){ return String(n).padStart(2,'0'); }
     function icsDateUTC(d){
@@ -1131,13 +1135,53 @@
         .replace(/,/g,'\\,');
     }
 
+    function downloadTextFile(filename, mimeType, content){
+      const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function icsForSingleEvent(ev){
+      const start = toDate(ev.start_time);
+      if (!start) return null;
+
+      const end = new Date(start.getTime() + 60*60*1000);
+      const nowStamp = icsDateUTC(new Date());
+      const uid = `${ev.id || Math.random().toString(16).slice(2)}@mytrips`;
+
+      const lines = [];
+      lines.push('BEGIN:VCALENDAR');
+      lines.push('VERSION:2.0');
+      lines.push('PRODID:-//MyTrips//EN');
+      lines.push('CALSCALE:GREGORIAN');
+      lines.push('METHOD:PUBLISH');
+
+      lines.push('BEGIN:VEVENT');
+      lines.push(`UID:${uid}`);
+      lines.push(`DTSTAMP:${nowStamp}`);
+      lines.push(`DTSTART:${icsDateUTC(start)}`);
+      lines.push(`DTEND:${icsDateUTC(end)}`);
+      lines.push(`SUMMARY:${icsEsc(ev.title || 'Evento')}`);
+      if (ev.description) lines.push(`DESCRIPTION:${icsEsc(ev.description)}`);
+      if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
+      lines.push('END:VEVENT');
+
+      lines.push('END:VCALENDAR');
+      return lines.join('\r\n');
+    }
+
     async function exportIcsForActiveTrip(){
       if (!activeTripId){
         showToast('warn', 'Export .ics', 'Primero selecciona un viaje.');
         return;
       }
 
-      // si LAST_EVENTS está vacío, intentamos cargar eventos para exportar
       let eventsToExport = (LAST_EVENTS && LAST_EVENTS.length) ? LAST_EVENTS : null;
       if (!eventsToExport){
         const { data, error } = await sb
@@ -1165,8 +1209,6 @@
       for (const ev of eventsToExport){
         const start = toDate(ev.start_time);
         if (!start) continue;
-
-        // default duration 60 min si no hay end_time (no existe en modelo)
         const end = new Date(start.getTime() + 60*60*1000);
 
         const uid = `${ev.id || Math.random().toString(16).slice(2)}@mytrips`;
@@ -1187,24 +1229,12 @@
 
       lines.push('END:VCALENDAR');
 
-      const blob = new Blob([lines.join('\r\n')], { type: 'text/calendar;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `mytrips_${activeTripId}.ics`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
+      downloadTextFile(`mytrips_${activeTripId}.ics`, 'text/calendar', lines.join('\r\n'));
       showToast('ok', 'Export .ics', 'Descargado. Ahora lo importas en tu calendario.');
     }
 
     /* ============================================================
       ✅ SHARE WhatsApp/Telegram (BÁSICO)
-      - Esto NO es integración de lectura/escritura. Es share rápido.
-      - Integración WhatsApp/Telegram real via n8n: siguiente paso.
     ============================================================ */
     function buildTripShareText(){
       const title = document.querySelector('.trip.active strong')?.textContent || 'Mi viaje';
@@ -1341,30 +1371,50 @@
       return out;
     }
 
+    /* ============================================================
+      ✅ FIX CRÍTICO: PARSEO DE FECHAS (ARREGLADO)
+      - Antes se “comía” la Z y eso rompía horas / notificaciones.
+      - Ahora:
+        1) ISO con Z o sin Z -> new Date(iso)
+        2) YYYY-MM-DD -> local con DEFAULT_TIME_IF_ONLY_DATE
+    ============================================================ */
     function toDate(value) {
       if (!value) return null;
+
+      // Supabase suele devolver ISO (con Z). new Date(iso) respeta TZ.
+      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+
       const s = String(value).trim();
-      const iso = s.replace('Z','');
+      if (!s) return null;
 
-      if (/^\d{4}-\d{2}-\d{2}T/.test(iso)){
-        const parts = iso.split(/[-T:.]/);
-        const d = new Date(
-          Number(parts[0]),
-          Number(parts[1]) - 1,
-          Number(parts[2]),
-          Number(parts[3] || 0),
-          Number(parts[4] || 0)
-        );
+      // ISO con tiempo
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)){
+        let d = new Date(s);
+        if (!isNaN(d.getTime())) return d;
+
+        // fallback si viene raro (sin segundos, etc.)
+        try{
+          const s2 = s.replace(' ', 'T');
+          d = new Date(s2);
+          return isNaN(d.getTime()) ? null : d;
+        }catch(e){
+          return null;
+        }
+      }
+
+      // Solo fecha
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)){
+        const [y,m,dd] = s.split('-').map(Number);
+        const hhmm = DEFAULT_TIME_IF_ONLY_DATE.split(':');
+        const hh = Number(hhmm[0] || 9);
+        const mm = Number(hhmm[1] || 0);
+        const d = new Date(y, m-1, dd, hh, mm, 0);
         return isNaN(d.getTime()) ? null : d;
       }
 
-      if (/^\d{4}-\d{2}-\d{2}$/.test(iso)){
-        const parts = iso.split('-');
-        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 9, 0);
-        return isNaN(d.getTime()) ? null : d;
-      }
-
-      return null;
+      // Último intento
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
     }
 
     function formatDay(d) {
@@ -1531,7 +1581,7 @@
       }
     }
 
-    btnNotifs.onclick = async () => {
+    async function handleEnableNotifs(){
       const ok = await ensureNotifyPermission();
       if (!ok){
         notifStatus.textContent = "⚠️ No se pudieron activar (revisa permisos del navegador).";
@@ -1540,11 +1590,15 @@
         showToast('ok', 'Notificaciones', 'Activadas. Deja esta pestaña abierta para recibir avisos.');
       }
       paintNotifStatus();
-      if (Notification.permission === "granted" && LAST_EVENTS.length) {
-        runNotificationRules(LAST_EVENTS);
-      }
-    };
 
+      // ✅ Solo arrancamos el loop si ya están concedidas (para que sí corra “en serio”)
+      if (Notification.permission === "granted") {
+        startNotifLoop();
+        if (LAST_EVENTS.length) runNotificationRules(LAST_EVENTS);
+      }
+    }
+
+    btnNotifs.onclick = handleEnableNotifs;
     paintNotifStatus();
 
     function renderAlerts(event){
@@ -1704,6 +1758,11 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
+    /* ============================================================
+      ✅ FIX CRÍTICO: BOTONES RÁPIDOS (MAPA/LINK/COPIAR) (ARREGLADO)
+      - Ya NO usan data-action (porque el router global lo interceptaba)
+      - Ahora usan data-qaction y solo se manejan dentro de cada tarjeta
+    ============================================================ */
     function renderQuickActions(event){
       const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
       const mapUrl = mapsUrlFromMetaOrLocation(meta, event.location);
@@ -1714,9 +1773,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       return `
         <div class="quick-actions">
-          <button class="qbtn" data-action="map" ${mapDisabled}>📍 Mapa</button>
-          <button class="qbtn" data-action="link" ${linkDisabled}>🔗 Link</button>
-          <button class="qbtn" data-action="copy">📋 Copiar</button>
+          <button class="qbtn" data-qaction="map" ${mapDisabled}>📍 Mapa</button>
+          <button class="qbtn" data-qaction="link" ${linkDisabled}>🔗 Link</button>
+          <button class="qbtn" data-qaction="copy">📋 Copiar</button>
+          <button class="qbtn" data-qaction="cal">📅 Calendario</button>
         </div>
       `;
     }
@@ -1966,7 +2026,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       t_end.value = '';
     }
 
-    addTripBtn.onclick = () => {
+    function handleOpenAddTrip(){
       editingTripId = null;
       modalTitle.textContent = 'Agregar viaje';
       deleteBtn.style.display = 'none';
@@ -1974,9 +2034,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       resetTripForm();
       showTripForm();
       openModal();
-    };
+    }
 
-    addEventBtn.onclick = () => {
+    function handleOpenAddEvent(){
       if (!activeTripId) {
         showToast('warn', 'Evento', 'Primero selecciona un viaje.');
         return;
@@ -1989,7 +2049,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       resetEventForm();
       showEventForm();
       openModal();
-    };
+    }
+
+    addTripBtn.onclick = handleOpenAddTrip;
+    addEventBtn.onclick = handleOpenAddEvent;
 
     function openModalEditEvent(event){
       editingEventId = event.id;
@@ -2070,8 +2133,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           closeModal();
           await loadTrips();
           if (data?.id) {
-            activeTripId = data.id;
-            await loadEvents(activeTripId);
+            setActiveTrip(data.id, true);
           }
           return;
         }
@@ -2187,33 +2249,39 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       loadEvents(activeTripId);
     };
 
+    async function deleteTripById(tripId){
+      const ok = confirm('¿Seguro que quieres borrar este viaje?');
+      if (!ok) return;
+
+      const ok2 = confirm('¿También borrar TODOS los eventos de este viaje? (recomendado si no hay cascade)');
+      if (ok2) {
+        const delEvents = await sb.from('events').delete().eq('trip_id', tripId);
+        if (delEvents.error) {
+          reportDbError('Borrar eventos', delEvents.error);
+          return;
+        }
+      }
+
+      const { error } = await sb.from('trips').delete().eq('id', tripId);
+      if (error) {
+        reportDbError('Borrar viaje', error);
+        return;
+      }
+
+      showToast('ok', 'Viaje borrado', 'Se eliminó correctamente.');
+
+      if (activeTripId === tripId) {
+        clearActiveTripSelection(false);
+      }
+
+      await loadTrips();
+    }
+
     deleteBtn.onclick = async () => {
       if (mode === "trip") {
         if (!editingTripId) return;
-
-        const ok = confirm('¿Seguro que quieres borrar este viaje?');
-        if (!ok) return;
-
-        const ok2 = confirm('¿También borrar TODOS los eventos de este viaje? (recomendado si no hay cascade)');
-        if (ok2) {
-          const delEvents = await sb.from('events').delete().eq('trip_id', editingTripId);
-          if (delEvents.error) {
-            reportDbError('Borrar eventos', delEvents.error);
-            return;
-          }
-        }
-
-        const { error } = await sb.from('trips').delete().eq('id', editingTripId);
-        if (error) {
-          reportDbError('Borrar viaje', error);
-          return;
-        }
-
-        showToast('ok', 'Viaje borrado', 'Se eliminó correctamente.');
+        await deleteTripById(editingTripId);
         closeModal();
-        activeTripId = null;
-        await loadTrips();
-        document.getElementById('events').innerHTML = `<div class="muted">Selecciona un viaje para ver su timeline.</div>`;
         return;
       }
 
@@ -2233,6 +2301,63 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       loadEvents(activeTripId);
     };
 
+    /* ============================================================
+      ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE (para tu request)
+      - “Timeline solo se contraiga al no estar seleccionado el viaje”
+      - Botón “Ocultar timeline” limpia selección
+    ============================================================ */
+    function persistActiveTripId(){
+      try{
+        if (!activeTripId) localStorage.removeItem(LAST_TRIP_STORAGE_KEY);
+        else localStorage.setItem(LAST_TRIP_STORAGE_KEY, String(activeTripId));
+      }catch(e){}
+    }
+
+    function readPersistedTripId(){
+      try{
+        const v = localStorage.getItem(LAST_TRIP_STORAGE_KEY);
+        return v ? String(v) : null;
+      }catch(e){
+        return null;
+      }
+    }
+
+    function clearActiveTripSelection(showToastMsg = true){
+      activeTripId = null;
+      persistActiveTripId();
+
+      document.querySelectorAll('.trip').forEach(x => x.classList.remove('active'));
+
+      const eventsDiv = document.getElementById('events');
+      eventsDiv.classList.add('muted');
+      eventsDiv.innerHTML = `<div class="muted">Selecciona un viaje para ver su timeline.</div>`;
+
+      LAST_EVENTS = [];
+      stopNotifLoop();
+
+      if (showToastMsg) showToast('info', 'Timeline', 'Timeline oculto. Selecciona un viaje para verlo.');
+    }
+
+    async function setActiveTrip(tripId, userInitiated = false){
+      activeTripId = tripId ? String(tripId) : null;
+      persistActiveTripId();
+
+      document.querySelectorAll('.trip').forEach(x => {
+        x.classList.toggle('active', x.getAttribute('data-trip-id') === String(activeTripId));
+      });
+
+      if (!activeTripId){
+        clearActiveTripSelection(false);
+        return;
+      }
+
+      loadViewPrefs();
+      paintViewHint();
+      await loadEvents(activeTripId);
+
+      if (userInitiated) showToast('ok', 'Viaje', 'Seleccionado.');
+    }
+
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -2248,6 +2373,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (!data || data.length === 0) {
         tripsDiv.innerHTML = `<div class="empty">No hay viajes aún.</div>`;
+        clearActiveTripSelection(false);
         return;
       }
 
@@ -2256,7 +2382,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       data.forEach(trip => {
         const div = document.createElement('div');
-        div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
+        div.className = 'trip';
+        div.setAttribute('data-trip-id', String(trip.id));
 
         const left = document.createElement('div');
         left.innerHTML = `<strong>${esc(trip.title)}</strong>`;
@@ -2266,18 +2393,22 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
         const editBtn = document.createElement('button');
         editBtn.className = 'icon-btn';
+        editBtn.type = 'button';
         editBtn.textContent = '✏️ Editar';
         editBtn.onclick = (e) => {
+          e.preventDefault();
           e.stopPropagation();
           openModalEditTrip(trip);
         };
 
         const delBtn = document.createElement('button');
         delBtn.className = 'icon-btn';
+        delBtn.type = 'button';
         delBtn.textContent = '🗑️ Borrar';
-        delBtn.onclick = (e) => {
+        delBtn.onclick = async (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          openModalEditTrip(trip);
+          await deleteTripById(trip.id);
         };
 
         actions.appendChild(editBtn);
@@ -2286,34 +2417,38 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         div.appendChild(left);
         div.appendChild(actions);
 
-        div.onclick = () => {
-          activeTripId = trip.id;
-          [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
-          div.classList.add('active');
-
-          loadViewPrefs();
-          paintViewHint();
-
-          loadEvents(trip.id);
+        div.onclick = async () => {
+          // ✅ Si clickeas un viaje distinto, selecciona
+          // ✅ Si clickeas el mismo, NO lo deseleccionamos aquí (para evitar confusión),
+          //    usa el botón “Ocultar timeline” (más claro en móvil).
+          await setActiveTrip(trip.id, true);
         };
 
         tripsDiv.appendChild(div);
       });
 
-      if (!activeTripId) {
-        activeTripId = data[0].id;
+      // ✅ Restaura último viaje (si existe). Si no, selecciona el primero (si AUTO_SELECT_FIRST_TRIP)
+      const persisted = readPersistedTripId();
+      const exists = persisted && data.some(t => String(t.id) === String(persisted));
 
-        loadViewPrefs();
-        paintViewHint();
-
-        const first = document.querySelector('.trip');
-        if (first) first.classList.add('active');
-        loadEvents(activeTripId);
+      if (exists){
+        await setActiveTrip(persisted, false);
+      } else if (AUTO_SELECT_FIRST_TRIP){
+        await setActiveTrip(data[0].id, false);
+      } else {
+        clearActiveTripSelection(false);
       }
     }
 
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
+
+      if (!tripId){
+        eventsDiv.classList.add('muted');
+        eventsDiv.innerHTML = `<div class="muted">Selecciona un viaje para ver su timeline.</div>`;
+        return;
+      }
+
       eventsDiv.classList.remove('muted');
       eventsDiv.innerHTML = 'Cargando timeline...';
 
@@ -2334,6 +2469,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (!data || data.length === 0) {
         eventsDiv.innerHTML = `<div class="empty">Este viaje aún no tiene eventos.</div>`;
+        LAST_EVENTS = [];
         return;
       }
 
@@ -2341,7 +2477,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       const filtered = dataClean.filter(eventMatchesFilters);
 
       LAST_EVENTS = filtered;
-      startNotifLoop();
+
+      // ✅ Si ya hay permisos, el loop corre y puede notificar
+      if (canNotify() && Notification.permission === 'granted') startNotifLoop();
       await runNotificationRules(filtered);
 
       if (!filtered.length){
@@ -2417,15 +2555,19 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
         pill.onclick = () => {
           if (accordionToggle.checked){
-            const willCollapse = !isDayCollapsed(dayKey) ? true : false;
-            if (willCollapse){
+            const wasCollapsed = isDayCollapsed(dayKey);
+
+            if (!wasCollapsed){
+              // colapsar este
               toggleDayCollapsed(dayKey);
             } else {
+              // abrir este y colapsar los demás
               const nextSet = new Set();
               DAY_KEYS_CURRENT.forEach(k => { if (k !== dayKey) nextSet.add(k); });
               COLLAPSED_DAYS = nextSet;
               saveCollapsedDays();
             }
+
             loadEvents(activeTripId);
             return;
           }
@@ -2537,21 +2679,31 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
               if (e.stopImmediatePropagation) e.stopImmediatePropagation();
               blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS;
 
-              const action = btn.getAttribute('data-action');
+              const qaction = btn.getAttribute('data-qaction');
               const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
               const mapUrl = mapsUrlFromMetaOrLocation(meta, event.location);
               const mainUrl = primaryUrlFromEvent(event);
 
-              if (action === 'map' && mapUrl){
+              if (qaction === 'map' && mapUrl){
                 window.open(mapUrl, '_blank', 'noopener');
                 return;
               }
-              if (action === 'link' && mainUrl){
+              if (qaction === 'link' && mainUrl){
                 window.open(mainUrl, '_blank', 'noopener');
                 return;
               }
-              if (action === 'copy'){
+              if (qaction === 'copy'){
                 await copyEventSummary(event);
+                return;
+              }
+              if (qaction === 'cal'){
+                const ics = icsForSingleEvent(event);
+                if (!ics){
+                  showToast('warn', 'Calendario', 'Este evento no tiene fecha/hora válida.');
+                  return;
+                }
+                downloadTextFile(`mytrips_event_${event.id || 'x'}.ics`, 'text/calendar', ics);
+                showToast('ok', 'Calendario', 'Descargado .ics del evento. Impórtalo en tu calendario.');
                 return;
               }
             });
@@ -2569,6 +2721,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       if (activeTripId) loadEvents(activeTripId);
     }, REFRESH_MS);
 
+    /* ============================================================
+      ✅ INIT
+    ============================================================ */
     loadTrips();
   </script>
 </body>
