@@ -212,6 +212,32 @@
     }
 
     /* ============================================================
+      ✅ FASE 2.3 (NUEVO): ACCIONES RÁPIDAS EN TARJETA
+      - botones pequeños (no abren modal)
+    ============================================================ */
+    .quick-actions{
+      margin-top: 8px;
+      display:flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .qbtn{
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+      user-select: none;
+    }
+    .qbtn:active{ transform: translateY(1px); }
+    .qbtn:disabled{
+      opacity: .55;
+      cursor: not-allowed;
+    }
+
+    /* ============================================================
       ✅ ALERTAS (UI)
       - Chips como: “✅ Check-in disponible”, “⏰ Salir al aeropuerto…”
       - Son solo VISUALES (no notificación del navegador)
@@ -371,6 +397,32 @@
     }
 
     /* ============================================================
+      ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA (COLAPSAR/EXPANDIR/ACORDEÓN)
+      - Persistente por viaje en localStorage
+    ============================================================ */
+    .view-controls{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap: wrap;
+      margin: 10px 0 12px;
+    }
+    .toggle{
+      display:flex;
+      gap:8px;
+      align-items:center;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background:#fff;
+      cursor:pointer;
+      user-select:none;
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .toggle input{ transform: translateY(1px); }
+
+    /* ============================================================
       ✅ NUEVO (CRUD): MODAL + FORM
     ============================================================ */
     .modal-backdrop{
@@ -507,6 +559,21 @@
       <div class="chip" data-range="today">Hoy</div>
       <div class="chip" data-range="tomorrow">Mañana</div>
       <div class="chip" data-range="next7">Próximos 7 días</div>
+    </div>
+
+    <!-- ============================================================
+      ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA
+    ============================================================ -->
+    <div class="view-controls">
+      <button id="expandAllBtn" class="btn">➕ Expandir todo</button>
+      <button id="collapseAllBtn" class="btn">➖ Colapsar todo</button>
+
+      <label class="toggle" title="Si está activo, al abrir un día se cierran los demás">
+        <input id="accordionToggle" type="checkbox" />
+        Modo acordeón
+      </label>
+
+      <span id="viewHint" class="hint"></span>
     </div>
 
     <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
@@ -1055,6 +1122,72 @@
     }
 
     /* ============================================================
+      ✅ FASE 2.3 (NUEVO): ACCIONES RÁPIDAS EN TARJETA
+      - Mapa (coords/location)
+      - Link principal (prioridad: checkin_url > booking_url > ticket_url)
+      - Copiar resumen (título, fecha/hora, lugar, meta)
+    ============================================================ */
+    function primaryUrlFromEvent(event){
+      const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+      // prioridad: checkin > booking > ticket
+      if (meta.checkin_url) return String(meta.checkin_url);
+      if (meta.booking_url) return String(meta.booking_url);
+      if (meta.ticket_url) return String(meta.ticket_url);
+      return null;
+    }
+
+    async function copyEventSummary(event){
+      const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+      const d = toDate(event.start_time);
+      const when = d ? `${formatDay(d)} ${formatTime(d)}` : 'Sin fecha';
+      let metaTxt = '';
+      try{
+        const keys = Object.keys(meta || {});
+        if (keys.length){
+          metaTxt = `\nMeta: ${JSON.stringify(meta)}`;
+        }
+      }catch(e){}
+      const txt =
+`MyTrips — Evento
+Título: ${event.title || ''}
+Cuándo: ${when}
+Lugar: ${event.location || ''}
+Tipo: ${event.type || ''}
+${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim();
+
+      try{
+        await navigator.clipboard.writeText(txt);
+        alert('✅ Copiado al portapapeles');
+      }catch(e){
+        // fallback
+        const ta = document.createElement('textarea');
+        ta.value = txt;
+        document.body.appendChild(ta);
+        ta.select();
+        try{ document.execCommand('copy'); alert('✅ Copiado al portapapeles'); }catch(_e){ alert('No se pudo copiar.'); }
+        document.body.removeChild(ta);
+      }
+    }
+
+    function renderQuickActions(event){
+      const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+      const mapUrl = mapsUrlFromMetaOrLocation(meta, event.location);
+      const mainUrl = primaryUrlFromEvent(event);
+
+      // Nota: los botones se renderizan como HTML y se cablean con delegación por dataset-id
+      const mapDisabled = mapUrl ? '' : 'disabled';
+      const linkDisabled = mainUrl ? '' : 'disabled';
+
+      return `
+        <div class="quick-actions">
+          <button class="qbtn" data-action="map" ${mapDisabled}>📍 Mapa</button>
+          <button class="qbtn" data-action="link" ${linkDisabled}>🔗 Link</button>
+          <button class="qbtn" data-action="copy">📋 Copiar</button>
+        </div>
+      `;
+    }
+
+    /* ============================================================
       ✅ FASE 2.2 (NUEVO): ESTADO FILTROS
       - No rompe loadEvents: filtramos SOBRE dataClean antes de agrupar
     ============================================================ */
@@ -1147,6 +1280,78 @@
 
       return true;
     }
+
+    /* ============================================================
+      ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA (ACORDEÓN / EXPAND-COLLAPSE)
+      - Persistente por viaje
+    ============================================================ */
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+    const accordionToggle = document.getElementById('accordionToggle');
+    const viewHint = document.getElementById('viewHint');
+
+    let DAY_KEYS_CURRENT = [];
+
+    function viewStorageKey(){
+      return `viewPrefs:${activeTripId || 'none'}`;
+    }
+
+    function loadViewPrefs(){
+      if (!activeTripId) return;
+      try{
+        const raw = localStorage.getItem(viewStorageKey());
+        if (!raw) { accordionToggle.checked = false; return; }
+        const obj = JSON.parse(raw);
+        accordionToggle.checked = !!obj.accordion;
+      }catch(e){
+        accordionToggle.checked = false;
+      }
+    }
+
+    function saveViewPrefs(){
+      if (!activeTripId) return;
+      try{
+        localStorage.setItem(viewStorageKey(), JSON.stringify({
+          accordion: !!accordionToggle.checked
+        }));
+      }catch(e){}
+    }
+
+    accordionToggle.addEventListener('change', () => {
+      saveViewPrefs();
+      paintViewHint();
+      if (activeTripId) loadEvents(activeTripId);
+    });
+
+    function paintViewHint(){
+      viewHint.textContent = accordionToggle.checked
+        ? "Acordeón activo: solo un día abierto a la vez."
+        : "Acordeón apagado: puedes abrir varios días.";
+    }
+    paintViewHint();
+
+    function collapseAllDays(){
+      // no colapsamos sin-fecha por default si es el único grupo
+      COLLAPSED_DAYS = new Set(DAY_KEYS_CURRENT.filter(k => k !== 'sin-fecha'));
+      saveCollapsedDays();
+      if (activeTripId) loadEvents(activeTripId);
+    }
+
+    function expandAllDays(){
+      COLLAPSED_DAYS = new Set();
+      saveCollapsedDays();
+      if (activeTripId) loadEvents(activeTripId);
+    }
+
+    expandAllBtn.onclick = () => {
+      if (!activeTripId) return;
+      expandAllDays();
+    };
+
+    collapseAllBtn.onclick = () => {
+      if (!activeTripId) return;
+      collapseAllDays();
+    };
 
     /* ============================================================
       ✅ MODAL / CRUD (TU MISMA ESTRUCTURA)
@@ -1499,6 +1704,11 @@
           activeTripId = trip.id;
           [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
           div.classList.add('active');
+
+          // ✅ FASE 2.2: cargar preferencias por viaje
+          loadViewPrefs();
+          paintViewHint();
+
           loadEvents(trip.id);
         };
 
@@ -1507,6 +1717,11 @@
 
       if (!activeTripId) {
         activeTripId = data[0].id;
+
+        // ✅ FASE 2.2: cargar preferencias por viaje
+        loadViewPrefs();
+        paintViewHint();
+
         const first = document.querySelector('.trip');
         if (first) first.classList.add('active');
         loadEvents(activeTripId);
@@ -1558,6 +1773,24 @@
         return a.localeCompare(b);
       });
 
+      // ✅ FASE 2.2: guardar day keys para expand/collapse all
+      DAY_KEYS_CURRENT = dayKeys.slice();
+
+      // ✅ FASE 2.2: si NO hay estado guardado y hay acordeón ON, abrimos solo el primer día
+      // (sin forzar si ya existe estado colapsado guardado)
+      try{
+        const raw = localStorage.getItem(collapsedStorageKey());
+        const hasSaved = !!raw;
+        if (!hasSaved && accordionToggle.checked){
+          // colapsa todo menos el primer día (si existe)
+          const firstDay = dayKeys.find(k => k !== 'sin-fecha') || dayKeys[0];
+          const nextSet = new Set();
+          dayKeys.forEach(k => { if (k !== firstDay) nextSet.add(k); });
+          COLLAPSED_DAYS = nextSet;
+          saveCollapsedDays();
+        }
+      }catch(e){}
+
       eventsDiv.innerHTML = '';
 
       for (const dayKey of dayKeys) {
@@ -1604,6 +1837,25 @@
         pill.appendChild(label);
 
         pill.onclick = () => {
+          // ✅ FASE 2.2: modo acordeón
+          if (accordionToggle.checked){
+            // si estamos abriendo este día, colapsa los demás
+            const willCollapse = !isDayCollapsed(dayKey) ? true : false; // si está abierto -> lo colapsará; si está colapsado -> lo abrirá
+            if (willCollapse){
+              // colapsar este día (normal)
+              toggleDayCollapsed(dayKey);
+            } else {
+              // abrir este día y cerrar los demás
+              const nextSet = new Set();
+              DAY_KEYS_CURRENT.forEach(k => { if (k !== dayKey) nextSet.add(k); });
+              COLLAPSED_DAYS = nextSet;
+              saveCollapsedDays();
+            }
+            loadEvents(activeTripId);
+            return;
+          }
+
+          // modo normal multi-día
           toggleDayCollapsed(dayKey);
           const nowCollapsed = isDayCollapsed(dayKey);
           caret.textContent = nowCollapsed ? '▸' : '▾';
@@ -1637,6 +1889,7 @@
 
           const alertsHtml = renderAlerts(event);
           const proBadgesHtml = renderProBadges(event);
+          const quickActionsHtml = renderQuickActions(event);
 
           const card = document.createElement('div');
           card.className = 'event';
@@ -1652,6 +1905,7 @@
               </div>
               ${event.description ? `<div class="event-desc">${esc(event.description)}</div>` : ``}
               ${alertsHtml}
+              ${quickActionsHtml}
               ${proBadgesHtml}
               <div class="event-meta">
                 <span class="badge">${ui.label}</span>
@@ -1660,7 +1914,34 @@
             </div>
           `;
 
+          // ✅ click general abre editar
           card.onclick = () => openModalEditEvent(event);
+
+          // ✅ FASE 2.3: delegación botones (no abrir modal)
+          card.querySelectorAll('.qbtn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              e.stopPropagation();
+
+              const action = btn.getAttribute('data-action');
+              const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+              const mapUrl = mapsUrlFromMetaOrLocation(meta, event.location);
+              const mainUrl = primaryUrlFromEvent(event);
+
+              if (action === 'map' && mapUrl){
+                window.open(mapUrl, '_blank', 'noopener');
+                return;
+              }
+              if (action === 'link' && mainUrl){
+                window.open(mainUrl, '_blank', 'noopener');
+                return;
+              }
+              if (action === 'copy'){
+                await copyEventSummary(event);
+                return;
+              }
+            });
+          });
+
           dayEventsWrap.appendChild(card);
         }
       }
