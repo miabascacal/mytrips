@@ -32,10 +32,10 @@
       --transfer:#f59e0b;
       --other:#64748b;
 
-      /* ✅ NUEVOS: tipos extra en BD */
-      --cruise:#0ea5e9;     /* crucero */
-      --car:#334155;        /* automovil */
-      --bus:#9333ea;        /* autobus */
+      /* ✅ NORMALIZADOS EN BD: cruise / car / bus */
+      --cruise:#0ea5e9;     /* cruise */
+      --car:#334155;        /* car */
+      --bus:#9333ea;        /* bus */
 
       /* ✅ NUEVO: tren */
       --train:#0f766e;      /* train */
@@ -364,8 +364,7 @@
     /* ============================================================
       ✅ UI POR TIPO DE EVENTO
       - icon/color/bg/label define cómo se ve cada tipo
-      ✅ NUEVO: crucero / automovil / autobus
-      ✅ NUEVO: train
+      ✅ BD NORMALIZADA: cruise / car / bus / train
     ============================================================ */
     const TYPE_UI = {
       flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
@@ -373,15 +372,15 @@
       activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
       transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
 
-      /* ✅ NUEVOS */
-      crucero:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
-      automovil: { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
-      autobus:   { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
+      /* ✅ NORMALIZADOS (BD) */
+      cruise:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
+      car:      { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
+      bus:      { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
 
-      /* ✅ NUEVO: tren (type = "train") */
-      train:     { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
+      /* ✅ tren (BD = "train") */
+      train:    { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
 
-      other:    { icon:'📌', color:'var(--other)',    bg:'var(--otherBg)',    label:'Otro' }
+      other:    { icon:'📌', color:'var(--other)',  bg:'var(--otherBg)',  label:'Otro' }
     };
 
     /* ============================================================
@@ -646,8 +645,8 @@
       - Pinta info de metadata por tipo (flight/hotel/activity/transfer)
       - También agrega el badge de 📍 location con link a Google Maps
       ✅ NUEVO:
-        - automovil/autobus usan pickup/dropoff/company igual que transfer
-        - crucero muestra operator/cabin/reference si existen
+        - car/bus usan pickup/dropoff/company igual que transfer
+        - cruise muestra operator/cabin/reference si existen
         - train (opcional) muestra company/reference si existen
     ============================================================ */
     function renderProBadges(event){
@@ -674,9 +673,8 @@
 
       const type = (event.type || '').toLowerCase();
 
-      /* ✅ OPCIONAL (si ya normalizaste types en BD y guardas “subtype”):
+      /* ✅ OPCIONAL (si guardas “subtype” en metadata):
          - Si type === activity y meta.subtype existe, lo mostramos como badge.
-         - No rompe nada si no lo usas.
       */
       if (type === 'activity' && meta.subtype) {
         badges.push(`<span class="pro-badge"><strong>subtype:</strong> ${esc(meta.subtype)}</span>`);
@@ -711,22 +709,22 @@
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ transfer + automovil + autobus comparten lógica de traslado
-      if (type === 'transfer' || type === 'automovil' || type === 'autobus') {
+      // ✅ transfer + car + bus comparten lógica de traslado
+      if (type === 'transfer' || type === 'car' || type === 'bus') {
         if (meta.pickup) badges.push(`<span class="pro-badge"><strong>Pickup:</strong> ${esc(meta.pickup)}</span>`);
         if (meta.dropoff) badges.push(`<span class="pro-badge"><strong>Dropoff:</strong> ${esc(meta.dropoff)}</span>`);
         if (meta.company) badges.push(`<span class="pro-badge"><strong>Proveedor:</strong> ${esc(meta.company)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ crucero: campos típicos (si los guardas en metadata)
-      if (type === 'crucero') {
+      // ✅ cruise: campos típicos (si los guardas en metadata)
+      if (type === 'cruise') {
         if (meta.operator) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.operator)}</span>`);
         if (meta.cabin) badges.push(`<span class="pro-badge"><strong>Cabina:</strong> ${esc(meta.cabin)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
-      // ✅ NUEVO: train (si guardas datos en metadata)
+      // ✅ train (si guardas datos en metadata)
       if (type === 'train') {
         if (meta.company) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.company)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
@@ -880,10 +878,9 @@
         for (const event of list) {
           const type = (event.type || '').toLowerCase();
 
-          /* ✅ OPCIONAL (para tu caso cuando normalizaste a activity):
-             Si el type es "activity" y guardas meta.subtype = crucero/automovil/autobus,
-             entonces usamos ese subtipo para el icono/estilo.
-             - No afecta si no lo usas.
+          /* ✅ OPCIONAL:
+             Si type === "activity" y guardas meta.subtype = cruise/car/bus,
+             usamos ese subtipo para el icono/estilo.
           */
           const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
           const subtype = (meta.subtype || '').toLowerCase();
