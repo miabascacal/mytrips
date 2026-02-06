@@ -31,13 +31,9 @@
       --activity:#16a34a;
       --transfer:#f59e0b;
       --other:#64748b;
-
-      /* ✅ NORMALIZADOS EN BD: cruise / car / bus */
       --cruise:#0ea5e9;     /* cruise */
       --car:#334155;        /* car */
       --bus:#9333ea;        /* bus */
-
-      /* ✅ NUEVO: tren */
       --train:#0f766e;      /* train */
 
       --flightBg: rgba(37,99,235,.08);
@@ -45,13 +41,9 @@
       --activityBg: rgba(22,163,74,.08);
       --transferBg: rgba(245,158,11,.10);
       --otherBg: rgba(100,116,139,.08);
-
-      /* ✅ NUEVOS: fondos */
       --cruiseBg: rgba(14,165,233,.10);
       --carBg: rgba(51,65,85,.08);
       --busBg: rgba(147,51,234,.10);
-
-      /* ✅ NUEVO: fondo tren */
       --trainBg: rgba(15,118,110,.10);
     }
 
@@ -371,17 +363,59 @@
       hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
       activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
       transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
-
-      /* ✅ NORMALIZADOS (BD) */
       cruise:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
       car:      { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
       bus:      { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
-
-      /* ✅ tren (BD = "train") */
       train:    { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
-
       other:    { icon:'📌', color:'var(--other)',  bg:'var(--otherBg)',  label:'Otro' }
     };
+
+    /* ============================================================
+      ✅ NUEVO (mejora agrupada #1): Normalización ES → EN
+      - Para que si en BD viene "crucero/automovil/autobus" también matchee
+      - Incluye soporte de acentos (autobús/automóvil)
+    ============================================================ */
+    const TYPE_ALIASES = {
+      crucero: 'cruise',
+      cruceros: 'cruise',
+      automovil: 'car',
+      automovil: 'car',
+      auto: 'car',
+      coche: 'car',
+      autobus: 'bus',
+      camion: 'bus',
+      tren: 'train'
+    };
+
+    function normalizeType(raw){
+      let t = (raw || '').toLowerCase().trim();
+
+      // Quita acentos: "autobús" -> "autobus", "automóvil" -> "automovil"
+      try {
+        t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      } catch(e) {}
+
+      return TYPE_ALIASES[t] || t;
+    }
+
+    /* ============================================================
+      ✅ NUEVO (mejora agrupada #2): Anti-duplicados opcional
+      - Si lo quieres apagar: pon false
+    ============================================================ */
+    const ENABLE_DEDUP = true;
+
+    function dedupeEvents(list){
+      if (!ENABLE_DEDUP) return list;
+      const seen = new Set();
+      const out = [];
+      for (const e of list) {
+        const key = `${String(e.title || '').trim().toLowerCase()}|${String(e.start_time || '')}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(e);
+      }
+      return out;
+    }
 
     /* ============================================================
       ✅ HELPERS DE FECHA/HORA
@@ -532,7 +566,9 @@
         if (!start) continue;
 
         const meta = (ev.metadata && typeof ev.metadata === 'object') ? ev.metadata : {};
-        const type = (ev.type || '').toLowerCase();
+
+        // ✅ NUEVO: normaliza type para que "crucero/autobús" no rompa reglas
+        const type = normalizeType(ev.type);
 
         const minsToStart = Math.round((start.getTime() - now) / 60000);
 
@@ -609,7 +645,9 @@
       (Estas son VISUALES, no notificación)
     ============================================================ */
     function renderAlerts(event){
-      const type = (event.type || '').toLowerCase();
+      // ✅ NUEVO: normaliza type para ES/acentos
+      const type = normalizeType(event.type);
+
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
       const start = toDate(event.start_time);
       if (!start) return '';
@@ -671,6 +709,9 @@
         return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
       }
 
+      // OJO: aquí dejamos tu lógica como estaba (type sin normalizar),
+      // porque tus ifs están en inglés y tu BD idealmente igual.
+      // Si quieres hacerlo 100% robusto, lo normalizo también.
       const type = (event.type || '').toLowerCase();
 
       /* ✅ OPCIONAL (si guardas “subtype” en metadata):
@@ -738,12 +779,6 @@
       return badges.length ? `<div class="pro-row">${badges.join('')}</div>` : '';
     }
 
-    /* ============================================================
-      ✅ CARGAR VIAJES (TRIPS) DESDE SUPABASE
-      - Lee tabla "trips"
-      - Pinta tarjetas clickeables
-      - Auto-selecciona el primer viaje si no hay uno activo
-    ============================================================ */
     async function loadTrips() {
       const tripsDiv = document.getElementById('trips');
       tripsDiv.classList.add('muted');
@@ -769,7 +804,6 @@
         div.className = 'trip' + (trip.id === activeTripId ? ' active' : '');
         div.innerHTML = `<strong>${esc(trip.title)}</strong>`;
 
-        // Al click: marca active y carga eventos de ese trip
         div.onclick = () => {
           activeTripId = trip.id;
           [...document.querySelectorAll('.trip')].forEach(x => x.classList.remove('active'));
@@ -780,7 +814,6 @@
         tripsDiv.appendChild(div);
       });
 
-      // Auto-carga el primer trip
       if (!activeTripId) {
         activeTripId = data[0].id;
         const first = document.querySelector('.trip');
@@ -789,13 +822,6 @@
       }
     }
 
-    /* ============================================================
-      ✅ CARGAR EVENTOS (EVENTS) DE UN TRIP
-      - Lee tabla "events" filtrada por trip_id
-      - Orden: order_index (si existe) y luego start_time
-      - Guarda en LAST_EVENTS y arranca loop de notificaciones
-      - Agrupa por día y pinta el timeline completo
-    ============================================================ */
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
       eventsDiv.classList.remove('muted');
@@ -818,14 +844,15 @@
         return;
       }
 
-      // ✅ D4.3: guardamos eventos en cache y arrancamos el loop (cada 60s)
-      LAST_EVENTS = data;
+      // ✅ NUEVO: opcional anti-duplicados (si hubo carga doble)
+      const dataClean = dedupeEvents(data);
+
+      LAST_EVENTS = dataClean;
       startNotifLoop();
 
-      // ✅ D4.2: al cargar, corremos reglas una vez (si ya hay permiso)
-      await runNotificationRules(data);
+      await runNotificationRules(dataClean);
 
-      const grouped = groupByDay(data);
+      const grouped = groupByDay(dataClean);
       const dayKeys = Array.from(grouped.keys()).sort((a,b) => {
         if (a === 'sin-fecha') return 1;
         if (b === 'sin-fecha') return -1;
@@ -837,7 +864,6 @@
       for (const dayKey of dayKeys) {
         const list = grouped.get(dayKey) || [];
 
-        // Orden dentro del día: order_index primero; luego hora
         list.sort((a,b) => {
           const ai = (a.order_index ?? null);
           const bi = (b.order_index ?? null);
@@ -853,7 +879,6 @@
           return da - db;
         });
 
-        // Header del día
         const dayRow = document.createElement('div');
         dayRow.className = 'day-row';
 
@@ -874,16 +899,13 @@
         dayRow.appendChild(line);
         eventsDiv.appendChild(dayRow);
 
-        // Cards del día
         for (const event of list) {
-          const type = (event.type || '').toLowerCase();
+          // ✅ NUEVO: normalización aplicada aquí también
+          const type = normalizeType(event.type);
 
-          /* ✅ OPCIONAL:
-             Si type === "activity" y guardas meta.subtype = cruise/car/bus,
-             usamos ese subtipo para el icono/estilo.
-          */
           const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
-          const subtype = (meta.subtype || '').toLowerCase();
+          const subtype = normalizeType(meta.subtype);
+
           const ui =
             (type === 'activity' && subtype && TYPE_UI[subtype])
               ? TYPE_UI[subtype]
@@ -892,8 +914,8 @@
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
 
-          const alertsHtml = renderAlerts(event);       // Chips (UI)
-          const proBadgesHtml = renderProBadges(event); // Metadata
+          const alertsHtml = renderAlerts(event);
+          const proBadgesHtml = renderProBadges(event);
 
           const card = document.createElement('div');
           card.className = 'event';
@@ -922,19 +944,10 @@
       }
     }
 
-    /* ============================================================
-      ✅ AUTO-REFRESH (D4.4)
-      - Refresca eventos cada 2 minutos para:
-        - traer cambios de BD (si agregas/actualizas eventos)
-        - y disparar reglas sin recargar la página manualmente
-      - Nota: tus notificaciones igual dependen de que la pestaña esté abierta.
-    ============================================================ */
     setInterval(() => {
       if (activeTripId) loadEvents(activeTripId);
     }, 2 * 60 * 1000);
 
-    // ✅ ARRANQUE INICIAL DE APP
-    // Carga trips, y por default se auto-carga el primer trip
     loadTrips();
   </script>
 </body>
