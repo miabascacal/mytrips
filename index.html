@@ -379,10 +379,12 @@
       crucero: 'cruise',
       cruceros: 'cruise',
       automovil: 'car',
-      automovil: 'car',
       auto: 'car',
       coche: 'car',
       autobus: 'bus',
+      autobuses: 'bus',
+      camion: 'bus',
+      camiones: 'bus',
       camion: 'bus',
       tren: 'train'
     };
@@ -712,7 +714,7 @@
       // OJO: aquí dejamos tu lógica como estaba (type sin normalizar),
       // porque tus ifs están en inglés y tu BD idealmente igual.
       // Si quieres hacerlo 100% robusto, lo normalizo también.
-      const type = (event.type || '').toLowerCase();
+      const type = normalizeType(event.type);
 
       /* ✅ OPCIONAL (si guardas “subtype” en metadata):
          - Si type === activity y meta.subtype existe, lo mostramos como badge.
