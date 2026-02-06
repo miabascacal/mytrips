@@ -37,6 +37,9 @@
       --car:#334155;        /* automovil */
       --bus:#9333ea;        /* autobus */
 
+      /* ✅ NUEVO: tren */
+      --train:#0f766e;      /* train */
+
       --flightBg: rgba(37,99,235,.08);
       --hotelBg: rgba(124,58,237,.08);
       --activityBg: rgba(22,163,74,.08);
@@ -47,6 +50,9 @@
       --cruiseBg: rgba(14,165,233,.10);
       --carBg: rgba(51,65,85,.08);
       --busBg: rgba(147,51,234,.10);
+
+      /* ✅ NUEVO: fondo tren */
+      --trainBg: rgba(15,118,110,.10);
     }
 
     /* ============================================================
@@ -359,6 +365,7 @@
       ✅ UI POR TIPO DE EVENTO
       - icon/color/bg/label define cómo se ve cada tipo
       ✅ NUEVO: crucero / automovil / autobus
+      ✅ NUEVO: train
     ============================================================ */
     const TYPE_UI = {
       flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
@@ -370,6 +377,9 @@
       crucero:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
       automovil: { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
       autobus:   { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
+
+      /* ✅ NUEVO: tren (type = "train") */
+      train:     { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
 
       other:    { icon:'📌', color:'var(--other)',    bg:'var(--otherBg)',    label:'Otro' }
     };
@@ -638,6 +648,7 @@
       ✅ NUEVO:
         - automovil/autobus usan pickup/dropoff/company igual que transfer
         - crucero muestra operator/cabin/reference si existen
+        - train (opcional) muestra company/reference si existen
     ============================================================ */
     function renderProBadges(event){
       const meta = event.metadata;
@@ -662,6 +673,14 @@
       }
 
       const type = (event.type || '').toLowerCase();
+
+      /* ✅ OPCIONAL (si ya normalizaste types en BD y guardas “subtype”):
+         - Si type === activity y meta.subtype existe, lo mostramos como badge.
+         - No rompe nada si no lo usas.
+      */
+      if (type === 'activity' && meta.subtype) {
+        badges.push(`<span class="pro-badge"><strong>subtype:</strong> ${esc(meta.subtype)}</span>`);
+      }
 
       if (type === 'flight') {
         if (meta.flight_number) badges.push(`<span class="pro-badge"><strong>Vuelo:</strong> ${esc(meta.flight_number)}</span>`);
@@ -704,6 +723,12 @@
       if (type === 'crucero') {
         if (meta.operator) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.operator)}</span>`);
         if (meta.cabin) badges.push(`<span class="pro-badge"><strong>Cabina:</strong> ${esc(meta.cabin)}</span>`);
+        if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
+      }
+
+      // ✅ NUEVO: train (si guardas datos en metadata)
+      if (type === 'train') {
+        if (meta.company) badges.push(`<span class="pro-badge"><strong>Operador:</strong> ${esc(meta.company)}</span>`);
         if (meta.reference) badges.push(`<span class="pro-badge"><strong>Ref:</strong> ${esc(meta.reference)}</span>`);
       }
 
@@ -854,7 +879,18 @@
         // Cards del día
         for (const event of list) {
           const type = (event.type || '').toLowerCase();
-          const ui = TYPE_UI[type] || TYPE_UI.other;
+
+          /* ✅ OPCIONAL (para tu caso cuando normalizaste a activity):
+             Si el type es "activity" y guardas meta.subtype = crucero/automovil/autobus,
+             entonces usamos ese subtipo para el icono/estilo.
+             - No afecta si no lo usas.
+          */
+          const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
+          const subtype = (meta.subtype || '').toLowerCase();
+          const ui =
+            (type === 'activity' && subtype && TYPE_UI[subtype])
+              ? TYPE_UI[subtype]
+              : (TYPE_UI[type] || TYPE_UI.other);
 
           const d = toDate(event.start_time);
           const time = d ? formatTime(d) : '--:--';
