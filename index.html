@@ -501,6 +501,53 @@
       line-height: 1.35;
     }
     .hidden{ display:none !important; }
+
+    /* ============================================================
+      ✅ FASE 2.4 (NUEVO): TOASTS / POPUPS NO BLOQUEANTES
+      - Sustituye alerts molestos y confirma guardado/borrado
+    ============================================================ */
+    .toast-wrap{
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      display:flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 10000;
+      pointer-events: none;
+    }
+    .toast{
+      pointer-events: auto;
+      max-width: min(460px, calc(100vw - 28px));
+      background:#111;
+      color:#fff;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.28);
+      display:flex;
+      gap: 10px;
+      align-items:flex-start;
+      line-height: 1.25;
+    }
+    .toast .t-ico{ font-weight: 900; }
+    .toast .t-body{ flex:1; }
+    .toast .t-title{ font-weight: 900; margin-bottom: 2px; }
+    .toast .t-msg{ opacity: .95; font-size: 13px; }
+    .toast .t-x{
+      border: 1px solid rgba(255,255,255,.22);
+      background: transparent;
+      color:#fff;
+      border-radius: 10px;
+      padding: 4px 8px;
+      cursor:pointer;
+      font-weight: 900;
+      pointer-events: auto;
+    }
+    .toast.info{ background:#111; }
+    .toast.ok{ background: #0f172a; }
+    .toast.warn{ background: #3b2f07; }
+    .toast.err{ background: #3b0a0a; }
   </style>
 </head>
 
@@ -639,11 +686,26 @@
             <div class="field">
               <label>Fecha/Hora inicio (start_time)</label>
               <input id="f_start" type="datetime-local" />
+              <div class="modal-hint">
+                - Si tu navegador no guarda la hora, usa “Fecha” + “Hora” abajo.<br/>
+                - Si pones solo fecha, se asume una hora por defecto (ej. 09:00).
+              </div>
             </div>
 
             <div class="field">
               <label>Orden (order_index)</label>
               <input id="f_order" type="number" placeholder="Ej. 10" />
+            </div>
+
+            <!-- ✅ FASE 2.4 (NUEVO): fallback fecha/hora por separado (sin romper f_start) -->
+            <div class="field">
+              <label>Fecha (fallback)</label>
+              <input id="f_date" type="date" />
+            </div>
+
+            <div class="field">
+              <label>Hora (fallback)</label>
+              <input id="f_time" type="time" />
             </div>
 
             <div class="field">
@@ -687,6 +749,9 @@
     </div>
   </div>
 
+  <!-- ✅ FASE 2.4 (NUEVO): contenedor de toasts -->
+  <div id="toastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
   <script>
     /* ============================================================
       ✅ CONEXIÓN A SUPABASE
@@ -701,6 +766,20 @@
     let activeTripId = null;
 
     /* ============================================================
+      ✅ FASE 2.4 (NUEVO): VARIABLES DE COMPORTAMIENTO (con descripción)
+      - REFRESH_MS: intervalo de auto-actualización del timeline
+      - NOTIF_LOOP_MS: intervalo del loop de reglas de notificación (siempre con pestaña abierta)
+      - CLOSE_ON_BACKDROP_CLICK: evita cierres accidentales del modal al tocar fuera (mobile)
+      - DEFAULT_TIME_IF_ONLY_DATE: hora por defecto cuando solo hay fecha
+      - CARD_TAP_MAX_MOVE_PX: umbral para diferenciar scroll vs tap en tarjetas (evita “click sensible”)
+    ============================================================ */
+    const REFRESH_MS = 5 * 60 * 1000;          // (5 min) cada cuánto refrescamos timeline automáticamente
+    const NOTIF_LOOP_MS = 60 * 1000;           // (1 min) cada cuánto evaluamos reglas de notificación
+    const CLOSE_ON_BACKDROP_CLICK = false;     // false = NO cerrar al tocar fondo (evita cierres accidentales)
+    const DEFAULT_TIME_IF_ONLY_DATE = "09:00"; // hora por defecto si el usuario solo captura fecha
+    const CARD_TAP_MAX_MOVE_PX = 10;           // si el dedo se mueve más, se asume scroll y no abre editar
+
+    /* ============================================================
       ✅ D4.3: CACHE + LOOP DE NOTIFICACIONES (sin recargar)
     ============================================================ */
     let LAST_EVENTS = [];
@@ -712,7 +791,46 @@
         if (LAST_EVENTS && LAST_EVENTS.length) {
           runNotificationRules(LAST_EVENTS);
         }
-      }, 60 * 1000);
+      }, NOTIF_LOOP_MS);
+    }
+
+    /* ============================================================
+      ✅ FASE 2.4 (NUEVO): TOASTS (POPUPS)
+    ============================================================ */
+    const toastWrap = document.getElementById('toastWrap');
+
+    function showToast(kind, title, msg, ttlMs = 3500){
+      try{
+        const t = document.createElement('div');
+        t.className = `toast ${kind || 'info'}`;
+
+        const ico = document.createElement('div');
+        ico.className = 't-ico';
+        ico.textContent = (kind === 'ok') ? '✅' : (kind === 'warn') ? '⚠️' : (kind === 'err') ? '⛔' : 'ℹ️';
+
+        const body = document.createElement('div');
+        body.className = 't-body';
+        body.innerHTML = `<div class="t-title">${esc(title || '')}</div><div class="t-msg">${esc(msg || '')}</div>`;
+
+        const x = document.createElement('button');
+        x.className = 't-x';
+        x.type = 'button';
+        x.textContent = '✖';
+        x.onclick = () => { if (t && t.parentNode) t.parentNode.removeChild(t); };
+
+        t.appendChild(ico);
+        t.appendChild(body);
+        t.appendChild(x);
+
+        toastWrap.appendChild(t);
+
+        setTimeout(() => {
+          if (t && t.parentNode) t.parentNode.removeChild(t);
+        }, Math.max(1200, ttlMs));
+      }catch(e){
+        // fallback: si algo falla, usamos alert (para no “romper” flujo)
+        try{ alert((title ? title + ': ' : '') + (msg || '')); }catch(_e){}
+      }
     }
 
     /* ============================================================
@@ -858,10 +976,18 @@
       return d.toISOString();
     }
 
-    function isoFromDateOnly(dateStr, defaultHHMM = "09:00"){
+    function isoFromDateOnly(dateStr, defaultHHMM = DEFAULT_TIME_IF_ONLY_DATE){
       if (!dateStr) return null;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
       const local = `${dateStr}T${defaultHHMM}`;
+      return fromLocalInputToIso(local);
+    }
+
+    /* ✅ FASE 2.4 (NUEVO): combina fecha + hora (fallback) */
+    function isoFromDateAndTime(dateStr, timeStr, defaultHHMM = DEFAULT_TIME_IF_ONLY_DATE){
+      if (!dateStr) return null;
+      const hhmm = (timeStr && /^\d{2}:\d{2}$/.test(timeStr)) ? timeStr : defaultHHMM;
+      const local = `${dateStr}T${hhmm}`;
       return fromLocalInputToIso(local);
     }
 
@@ -1000,6 +1126,9 @@
       const ok = await ensureNotifyPermission();
       if (!ok){
         notifStatus.textContent = "⚠️ No se pudieron activar (revisa permisos del navegador).";
+        showToast('warn', 'Notificaciones', 'No se pudieron activar. Revisa permisos del sitio/navegador.');
+      } else {
+        showToast('ok', 'Notificaciones', 'Activadas. Deja esta pestaña abierta para recibir avisos.');
       }
       paintNotifStatus();
       if (Notification.permission === "granted" && LAST_EVENTS.length) {
@@ -1157,14 +1286,19 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       try{
         await navigator.clipboard.writeText(txt);
-        alert('✅ Copiado al portapapeles');
+        showToast('ok', 'Copiar', 'Copiado al portapapeles.');
       }catch(e){
         // fallback
         const ta = document.createElement('textarea');
         ta.value = txt;
         document.body.appendChild(ta);
         ta.select();
-        try{ document.execCommand('copy'); alert('✅ Copiado al portapapeles'); }catch(_e){ alert('No se pudo copiar.'); }
+        try{
+          document.execCommand('copy');
+          showToast('ok', 'Copiar', 'Copiado al portapapeles.');
+        }catch(_e){
+          showToast('err', 'Copiar', 'No se pudo copiar.');
+        }
         document.body.removeChild(ta);
       }
     }
@@ -1378,6 +1512,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     const f_desc = document.getElementById('f_desc');
     const f_meta = document.getElementById('f_meta');
 
+    /* ✅ FASE 2.4 (NUEVO): inputs fallback */
+    const f_date = document.getElementById('f_date');
+    const f_time = document.getElementById('f_time');
+
     const addEventBtn = document.getElementById('addEventBtn');
     const addTripBtn = document.getElementById('addTripBtn');
 
@@ -1396,8 +1534,15 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     }
 
     closeModalBtn.onclick = closeModal;
+
+    /* ✅ FASE 2.4: evitar cierres accidentales al tocar backdrop (mobile) */
     modalBackdrop.addEventListener('click', (e) => {
-      if (e.target === modalBackdrop) closeModal();
+      if (e.target === modalBackdrop && CLOSE_ON_BACKDROP_CLICK) closeModal();
+    });
+
+    /* ✅ FASE 2.4: permitir cerrar con ESC (más controlado que tocar afuera) */
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modalBackdrop.style.display === 'flex') closeModal();
     });
 
     function showTripForm(){
@@ -1420,6 +1565,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_source.value = 'manual';
       f_desc.value = '';
       f_meta.value = '';
+
+      /* ✅ FASE 2.4: reset fallback */
+      f_date.value = '';
+      f_time.value = '';
     }
 
     function resetTripForm(){
@@ -1440,7 +1589,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
     addEventBtn.onclick = () => {
       if (!activeTripId) {
-        alert('Primero selecciona un viaje.');
+        showToast('warn', 'Evento', 'Primero selecciona un viaje.');
         return;
       }
       editingEventId = null;
@@ -1467,6 +1616,21 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_location.value = event.location || '';
       f_source.value = event.source || 'manual';
       f_desc.value = event.description || '';
+
+      /* ✅ FASE 2.4: poblar fallback date/time desde start_time */
+      const d = toDate(event.start_time);
+      if (d){
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const dd = String(d.getDate()).padStart(2,'0');
+        const hh = String(d.getHours()).padStart(2,'0');
+        const mm = String(d.getMinutes()).padStart(2,'0');
+        f_date.value = `${y}-${m}-${dd}`;
+        f_time.value = `${hh}:${mm}`;
+      } else {
+        f_date.value = '';
+        f_time.value = '';
+      }
 
       try {
         const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
@@ -1498,7 +1662,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       if (mode === "trip") {
         const title = t_title.value.trim();
         if (!title) {
-          alert('El nombre del viaje es obligatorio.');
+          showToast('warn', 'Viaje', 'El nombre del viaje es obligatorio.');
           return;
         }
 
@@ -1511,9 +1675,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         if (!editingTripId) {
           const { data, error } = await sb.from('trips').insert(payload).select('*').single();
           if (error) {
-            alert('Error al crear viaje: ' + error.message);
+            showToast('err', 'Crear viaje', error.message || 'Error al crear viaje.');
             return;
           }
+          showToast('ok', 'Viaje creado', 'Listo. Ya puedes agregar eventos.');
           closeModal();
           await loadTrips();
           if (data?.id) {
@@ -1525,10 +1690,11 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
         const { error } = await sb.from('trips').update(payload).eq('id', editingTripId);
         if (error) {
-          alert('Error al guardar viaje: ' + error.message);
+          showToast('err', 'Guardar viaje', error.message || 'Error al guardar viaje.');
           return;
         }
 
+        showToast('ok', 'Viaje actualizado', 'Cambios guardados.');
         closeModal();
         await loadTrips();
         if (activeTripId) await loadEvents(activeTripId);
@@ -1536,26 +1702,40 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
 
       if (!activeTripId) {
-        alert('Primero selecciona un viaje.');
+        showToast('warn', 'Evento', 'Primero selecciona un viaje.');
         return;
       }
 
       const title = f_title.value.trim();
       if (!title) {
-        alert('El título es obligatorio.');
+        showToast('warn', 'Evento', 'El título es obligatorio.');
         return;
       }
 
+      /* ============================================================
+        ✅ FASE 2.4: FIX FECHA SIN HORA
+        - Prioridad:
+          1) f_start (datetime-local)
+          2) f_date + f_time (fallback)
+          3) si hay fecha sin hora, usa DEFAULT_TIME_IF_ONLY_DATE
+      ============================================================ */
       const rawStart = (f_start.value || '').trim();
       let startIso = null;
 
-      if (!rawStart) {
-        startIso = null;
-      } else if (/^\d{4}-\d{2}-\d{2}$/.test(rawStart)) {
-        startIso = isoFromDateOnly(rawStart, "09:00");
-      } else {
+      if (rawStart) {
+        // datetime-local debe venir como YYYY-MM-DDTHH:MM
         startIso = fromLocalInputToIso(rawStart);
         if (!startIso) startIso = null;
+      } else {
+        // fallback: si el usuario eligió fecha (aunque no haya hora)
+        const ds = (f_date.value || '').trim();
+        const ts = (f_time.value || '').trim();
+        if (ds){
+          startIso = isoFromDateAndTime(ds, ts, DEFAULT_TIME_IF_ONLY_DATE);
+          if (!startIso) startIso = null;
+        } else {
+          startIso = null;
+        }
       }
 
       const orderIndex = f_order.value === '' ? null : Number(f_order.value);
@@ -1566,7 +1746,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         try {
           metaObj = JSON.parse(metaRaw);
         } catch (e) {
-          alert('Metadata no es JSON válido. Corrígelo o déjalo vacío.');
+          showToast('warn', 'Metadata', 'No es JSON válido. Corrígelo o déjalo vacío.');
           return;
         }
       }
@@ -1586,9 +1766,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       if (!editingEventId) {
         const { error } = await sb.from('events').insert(payload);
         if (error) {
-          alert('Error al crear: ' + error.message);
+          showToast('err', 'Crear evento', error.message || 'Error al crear.');
           return;
         }
+        showToast('ok', 'Evento creado', 'Guardado correctamente.');
         closeModal();
         loadEvents(activeTripId);
         return;
@@ -1596,10 +1777,11 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       const { error } = await sb.from('events').update(payload).eq('id', editingEventId);
       if (error) {
-        alert('Error al guardar cambios: ' + error.message);
+        showToast('err', 'Guardar evento', error.message || 'Error al guardar cambios.');
         return;
       }
 
+      showToast('ok', 'Evento actualizado', 'Cambios guardados.');
       closeModal();
       loadEvents(activeTripId);
     };
@@ -1615,17 +1797,18 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         if (ok2) {
           const delEvents = await sb.from('events').delete().eq('trip_id', editingTripId);
           if (delEvents.error) {
-            alert('Error al borrar eventos del viaje: ' + delEvents.error.message);
+            showToast('err', 'Borrar eventos', delEvents.error.message || 'Error al borrar eventos del viaje.');
             return;
           }
         }
 
         const { error } = await sb.from('trips').delete().eq('id', editingTripId);
         if (error) {
-          alert('Error al borrar viaje: ' + error.message);
+          showToast('err', 'Borrar viaje', error.message || 'Error al borrar viaje.');
           return;
         }
 
+        showToast('ok', 'Viaje borrado', 'Se eliminó correctamente.');
         closeModal();
         activeTripId = null;
         await loadTrips();
@@ -1640,10 +1823,11 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       const { error } = await sb.from('events').delete().eq('id', editingEventId);
       if (error) {
-        alert('Error al borrar: ' + error.message);
+        showToast('err', 'Borrar evento', error.message || 'Error al borrar.');
         return;
       }
 
+      showToast('ok', 'Evento borrado', 'Se eliminó correctamente.');
       closeModal();
       loadEvents(activeTripId);
     };
@@ -1657,6 +1841,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (error) {
         tripsDiv.innerText = 'Error cargando viajes: ' + error.message;
+        showToast('err', 'Viajes', error.message || 'Error cargando viajes.');
         return;
       }
 
@@ -1744,6 +1929,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       if (error) {
         eventsDiv.innerText = 'Error cargando eventos: ' + error.message;
+        showToast('err', 'Eventos', error.message || 'Error cargando eventos.');
         return;
       }
 
@@ -1914,8 +2100,23 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             </div>
           `;
 
-          // ✅ click general abre editar
-          card.onclick = () => openModalEditEvent(event);
+          /* ============================================================
+            ✅ FASE 2.4: evitar “tap sensible” al hacer scroll
+            - Solo abre editar si fue un tap (movimiento mínimo)
+          ============================================================ */
+          let downPt = null;
+          card.addEventListener('pointerdown', (e) => {
+            downPt = { x: e.clientX, y: e.clientY };
+          });
+          card.addEventListener('pointerup', (e) => {
+            if (!downPt) return;
+            const dx = Math.abs(e.clientX - downPt.x);
+            const dy = Math.abs(e.clientY - downPt.y);
+            downPt = null;
+            if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
+              openModalEditEvent(event);
+            }
+          });
 
           // ✅ FASE 2.3: delegación botones (no abrir modal)
           card.querySelectorAll('.qbtn').forEach(btn => {
@@ -1947,9 +2148,12 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
+    /* ============================================================
+      ✅ AUTO-REFRESH TIMELINE (ajustado a 5 min)
+    ============================================================ */
     setInterval(() => {
       if (activeTripId) loadEvents(activeTripId);
-    }, 2 * 60 * 1000);
+    }, REFRESH_MS);
 
     loadTrips();
   </script>
