@@ -54,6 +54,8 @@
       --trainBg: rgba(15,118,110,.10);
 
       --ui-click-z: 50; /* ✅ NUEVO: z-index base para elementos clicables (anti-overlay) */
+
+      --focus: rgba(37,99,235,.22); /* ✅ NUEVO: color de foco accesible */
     }
 
     /* ============================================================
@@ -70,6 +72,12 @@
 
     /* si llegas a agregar elementos decorativos encima, que no intercepten */
     .overlay, .bg, .decor { pointer-events: none; }
+
+    /* ✅ NUEVO: foco visible */
+    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
 
     /* ============================================================
       ✅ ESTILO GENERAL DE PÁGINA
@@ -567,6 +575,29 @@
     .toast.ok{ background: #0f172a; }
     .toast.warn{ background: #3b2f07; }
     .toast.err{ background: #3b0a0a; }
+
+    /* ============================================================
+      ✅ NUEVO: indicador online/offline (PWA friendly)
+    ============================================================ */
+    .net-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background:#fff;
+      font-size: 12px;
+      font-weight: 800;
+      user-select:none;
+    }
+    .dot{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:#16a34a;
+    }
+    .net-pill.offline .dot{ background:#ef4444; }
   </style>
 </head>
 
@@ -586,6 +617,7 @@
       <button id="addTripBtn" class="btn" data-action="open-add-trip">➕ Agregar viaje</button>
       <button id="installPwaBtn" class="btn" data-action="pwa-install" title="Instala la app en tu celular/desktop">📲 Instalar</button>
       <button id="clearTripBtn" class="btn" data-action="clear-trip" title="Oculta el timeline hasta seleccionar un viaje">🧹 Ocultar timeline</button>
+      <span id="netPill" class="net-pill" title="Estado de conexión"><span class="dot"></span><span id="netText">Online</span></span>
       <span class="hint">Tip: selecciona un viaje para ver su timeline. (Puedes “deseleccionar” el viaje con el botón de Ocultar.)</span>
     </div>
 
@@ -662,7 +694,7 @@
     <div class="modal">
       <div class="modal-head">
         <strong id="modalTitle">Agregar</strong>
-        <button id="closeModalBtn" class="btn">✖</button>
+        <button id="closeModalBtn" class="btn" type="button">✖</button>
       </div>
 
       <div class="modal-body">
@@ -772,8 +804,8 @@
       </div>
 
       <div class="modal-actions">
-        <button id="deleteBtn" class="btn danger" style="display:none;">🗑️ Borrar</button>
-        <button id="saveBtn" class="btn primary">💾 Guardar</button>
+        <button id="deleteBtn" class="btn danger" style="display:none;" type="button">🗑️ Borrar</button>
+        <button id="saveBtn" class="btn primary" type="button">💾 Guardar</button>
       </div>
     </div>
   </div>
@@ -784,6 +816,7 @@
   <script>
     /* ============================================================
       ✅ CONEXIÓN A SUPABASE
+      ⚠️ NOTA: esto es una key publishable; aun así, usa RLS/policies.
     ============================================================ */
     const SUPABASE_URL = 'https://lxjaudzhsshyupcgzwla.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_gg_YSsCPShq3Hwr2VtCaYg_6I_p43TT';
@@ -793,23 +826,22 @@
       ✅ ESTADO DE APP
     ============================================================ */
     let activeTripId = null;
-    // ✅ NUEVO: control de toggle expand/contrae del timeline por viaje
-    let LAST_TOGGLED_TRIP_ID = null; // guarda el último viaje clicado (para saber si es el mismo)
-    let TIMELINE_IS_EXPANDED = false; // true=timeline visible, false=timeline colapsado
+
     /* ============================================================
       ✅ FASE 2.4 (NUEVO): VARIABLES DE COMPORTAMIENTO (con descripción)
+      (Regla tuya: cada variable nueva lleva comentario)
     ============================================================ */
-    const REFRESH_MS = 5 * 60 * 1000;          // (5 min) cada cuánto refrescamos timeline automáticamente
-    const NOTIF_LOOP_MS = 60 * 1000;           // (1 min) cada cuánto evaluamos reglas de notificación
-    const CLOSE_ON_BACKDROP_CLICK = false;     // false = NO cerrar al tocar fondo (evita cierres accidentales)
-    const DEFAULT_TIME_IF_ONLY_DATE = "09:00"; // hora por defecto si el usuario solo captura fecha
-    const CARD_TAP_MAX_MOVE_PX = 10;           // si el dedo se mueve más, se asume scroll y no abre editar
+    const REFRESH_MS = 5 * 60 * 1000;             // (5 min) cada cuánto refrescamos timeline automáticamente
+    const NOTIF_LOOP_MS = 60 * 1000;              // (1 min) cada cuánto evaluamos reglas de notificación
+    const CLOSE_ON_BACKDROP_CLICK = false;        // false = NO cerrar al tocar fondo (evita cierres accidentales)
+    const DEFAULT_TIME_IF_ONLY_DATE = "09:00";    // hora por defecto si el usuario solo captura fecha
+    const CARD_TAP_MAX_MOVE_PX = 10;              // si el dedo se mueve más, se asume scroll y no abre editar
     const CARD_BLOCK_EDIT_AFTER_QACTION_MS = 700; // ventana para bloquear abrir edición después de usar botones rápidos
-    const SHOW_DB_DEBUG = true;                // true = logs útiles en consola (Network/403/RLS)
-    const SHOW_RLS_HINTS = true;               // true = si huele a RLS, avisamos con explicación clara
-
-    const LAST_TRIP_STORAGE_KEY = 'mytrips:lastActiveTripId'; // ✅ NUEVO: recuerda selección (o ausencia) del viaje
-    const AUTO_SELECT_FIRST_TRIP = true; // ✅ NUEVO: si no hay viaje guardado, selecciona el primero automáticamente
+    const SHOW_DB_DEBUG = true;                   // true = logs útiles en consola (Network/403/RLS)
+    const SHOW_RLS_HINTS = true;                  // true = si huele a RLS, avisamos con explicación clara
+    const LAST_TRIP_STORAGE_KEY = 'mytrips:lastActiveTripId'; // recuerda selección (o ausencia) del viaje
+    const AUTO_SELECT_FIRST_TRIP = true;          // si no hay viaje guardado, selecciona el primero automáticamente
+    const ONLINE_PING_TOAST = false;              // muestra toast al volver a estar online (útil si importas offline)
 
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
@@ -847,6 +879,12 @@
     ============================================================ */
     const toastWrap = document.getElementById('toastWrap');
 
+    function esc(s){
+      return String(s ?? '').replace(/[&<>"']/g, m => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
+      }[m]));
+    }
+
     function showToast(kind, title, msg, ttlMs = 3500){
       try{
         const t = document.createElement('div');
@@ -881,6 +919,22 @@
     }
 
     /* ============================================================
+      ✅ NUEVO: ESTADO ONLINE/OFFLINE (sin romper estructura)
+    ============================================================ */
+    const netPill = document.getElementById('netPill');
+    const netText = document.getElementById('netText');
+
+    function paintNet(){
+      const online = navigator.onLine;
+      if (!netPill || !netText) return;
+      netPill.classList.toggle('offline', !online);
+      netText.textContent = online ? 'Online' : 'Offline';
+    }
+    window.addEventListener('online', () => { paintNet(); if (ONLINE_PING_TOAST) showToast('ok','Conexión','Volviste a estar online.'); });
+    window.addEventListener('offline', () => { paintNet(); showToast('warn','Conexión','Estás offline. Algunas acciones pueden fallar.'); });
+    paintNet();
+
+    /* ============================================================
       ✅ NUEVO: MEJOR DIAGNÓSTICO DE ERRORES (RLS / policies / 403)
     ============================================================ */
     function looksLikeRLS(error){
@@ -905,7 +959,7 @@
         showToast(
           'warn',
           'Posible bloqueo por RLS',
-          'Supabase está bloqueando UPDATE/DELETE por policies. Revisa RLS en la tabla (trips/events) y agrega policy de UPDATE/DELETE.'
+          'Supabase podría estar bloqueando UPDATE/DELETE por policies. Revisa RLS en la tabla (trips/events) y agrega policy de UPDATE/DELETE.'
         );
       }
 
@@ -916,17 +970,14 @@
 
     /* ============================================================
       ✅ FIX CRÍTICO: CLICK ROUTER (ARREGLADO)
-      - Antes “rompía” los botones rápidos (Mapa/Link/Copiar) porque
-        también usaban data-action. Ahora:
-        1) SOLO maneja acciones de TOOLBAR/HEADER (botones .btn)
-        2) NO hace recursion con .click()
+      - Maneja acciones de TOOLBAR/HEADER (botones .btn)
+      - No interfiere con quick-actions dentro de tarjetas
     ============================================================ */
     document.addEventListener('click', async (e) => {
       const el = e.target.closest('[data-action]');
       if (!el) return;
 
       // ✅ Evitar capturar los botones rápidos dentro de tarjetas
-      // (los quick actions se manejan por listeners propios del card)
       if (el.closest('.quick-actions')) return;
 
       const action = String(el.getAttribute('data-action') || '').trim();
@@ -991,6 +1042,12 @@
       excelInput.value = '';
       pdfInput.value = '';
       excelInput.click();
+    }
+
+    function normalizeType(raw){
+      let t = (raw || '').toLowerCase().trim();
+      try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
+      return TYPE_ALIASES[t] || t;
     }
 
     function guessEventTypeFromText(s){
@@ -1149,6 +1206,36 @@
       URL.revokeObjectURL(url);
     }
 
+    function toDate(value) {
+      if (!value) return null;
+      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+
+      const s = String(value).trim();
+      if (!s) return null;
+
+      if (/^\d{4}-\d{2}-\d{2}T/.test(s)){
+        let d = new Date(s);
+        if (!isNaN(d.getTime())) return d;
+        try{
+          const s2 = s.replace(' ', 'T');
+          d = new Date(s2);
+          return isNaN(d.getTime()) ? null : d;
+        }catch(e){ return null; }
+      }
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)){
+        const [y,m,dd] = s.split('-').map(Number);
+        const hhmm = DEFAULT_TIME_IF_ONLY_DATE.split(':');
+        const hh = Number(hhmm[0] || 9);
+        const mm = Number(hhmm[1] || 0);
+        const d = new Date(y, m-1, dd, hh, mm, 0);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
     function icsForSingleEvent(ev){
       const start = toDate(ev.start_time);
       if (!start) return null;
@@ -1238,6 +1325,14 @@
     /* ============================================================
       ✅ SHARE WhatsApp/Telegram (BÁSICO)
     ============================================================ */
+    function formatDay(d) {
+      return d.toLocaleDateString('es-MX', { dateStyle: 'medium' });
+    }
+
+    function formatTime(d) {
+      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    }
+
     function buildTripShareText(){
       const title = document.querySelector('.trip.active strong')?.textContent || 'Mi viaje';
       const evs = (LAST_EVENTS || []).slice(0, 12);
@@ -1352,13 +1447,7 @@
       tren: 'train'
     };
 
-    function normalizeType(raw){
-      let t = (raw || '').toLowerCase().trim();
-      try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
-      return TYPE_ALIASES[t] || t;
-    }
-
-    const ENABLE_DEDUP = true;
+    const ENABLE_DEDUP = true; // evita duplicados exactos (title + start_time)
 
     function dedupeEvents(list){
       if (!ENABLE_DEDUP) return list;
@@ -1371,60 +1460,6 @@
         out.push(e);
       }
       return out;
-    }
-
-    /* ============================================================
-      ✅ FIX CRÍTICO: PARSEO DE FECHAS (ARREGLADO)
-      - Antes se “comía” la Z y eso rompía horas / notificaciones.
-      - Ahora:
-        1) ISO con Z o sin Z -> new Date(iso)
-        2) YYYY-MM-DD -> local con DEFAULT_TIME_IF_ONLY_DATE
-    ============================================================ */
-    function toDate(value) {
-      if (!value) return null;
-
-      // Supabase suele devolver ISO (con Z). new Date(iso) respeta TZ.
-      if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-
-      const s = String(value).trim();
-      if (!s) return null;
-
-      // ISO con tiempo
-      if (/^\d{4}-\d{2}-\d{2}T/.test(s)){
-        let d = new Date(s);
-        if (!isNaN(d.getTime())) return d;
-
-        // fallback si viene raro (sin segundos, etc.)
-        try{
-          const s2 = s.replace(' ', 'T');
-          d = new Date(s2);
-          return isNaN(d.getTime()) ? null : d;
-        }catch(e){
-          return null;
-        }
-      }
-
-      // Solo fecha
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)){
-        const [y,m,dd] = s.split('-').map(Number);
-        const hhmm = DEFAULT_TIME_IF_ONLY_DATE.split(':');
-        const hh = Number(hhmm[0] || 9);
-        const mm = Number(hhmm[1] || 0);
-        const d = new Date(y, m-1, dd, hh, mm, 0);
-        return isNaN(d.getTime()) ? null : d;
-      }
-
-      // Último intento
-      const d = new Date(s);
-      return isNaN(d.getTime()) ? null : d;
-    }
-
-    function formatDay(d) {
-      return d.toLocaleDateString('es-MX', { dateStyle: 'medium' });
-    }
-
-    function formatTime(d) {
-      return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
     }
 
     function fromIsoToLocalInput(iso){
@@ -1466,12 +1501,6 @@
       return map;
     }
 
-    function esc(s){
-      return String(s ?? '').replace(/[&<>"']/g, m => ({
-        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'
-      }[m]));
-    }
-
     function mapsUrlFromMetaOrLocation(meta, location){
       const coords = meta?.coords;
       if (coords?.lat && coords?.lng) {
@@ -1500,6 +1529,11 @@
       return sign < 0 ? `hace ${txt}` : `en ${txt}`;
     }
 
+    /* ============================================================
+      ✅ NOTIFICACIONES (browser-only)
+      - Requiere pestaña abierta
+      - Push real: siguiente fase con service worker
+    ============================================================ */
     function canNotify() {
       return ("Notification" in window);
     }
@@ -1593,16 +1627,19 @@
       }
       paintNotifStatus();
 
-      // ✅ Solo arrancamos el loop si ya están concedidas (para que sí corra “en serio”)
       if (Notification.permission === "granted") {
         startNotifLoop();
         if (LAST_EVENTS.length) runNotificationRules(LAST_EVENTS);
       }
     }
 
+    // ✅ Router global ya maneja el data-action, pero dejamos onClick por compatibilidad segura
     btnNotifs.onclick = handleEnableNotifs;
     paintNotifStatus();
 
+    /* ============================================================
+      ✅ ALERTAS + PRO BADGES + QUICK ACTIONS
+    ============================================================ */
     function renderAlerts(event){
       const type = normalizeType(event.type);
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
@@ -1658,7 +1695,8 @@
       const type = normalizeType(event.type);
 
       if (type === 'activity' && meta.subtype) {
-        badges.push(`<span class="pro-badge"><strong>subtype:</strong> ${esc(meta.subtype)}</span>`);
+        const st = normalizeType(meta.subtype);
+        badges.push(`<span class="pro-badge"><strong>subtype:</strong> ${esc(st)}</span>`);
       }
 
       if (type === 'flight') {
@@ -1760,11 +1798,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
-    /* ============================================================
-      ✅ FIX CRÍTICO: BOTONES RÁPIDOS (MAPA/LINK/COPIAR) (ARREGLADO)
-      - Ya NO usan data-action (porque el router global lo interceptaba)
-      - Ahora usan data-qaction y solo se manejan dentro de cada tarjeta
-    ============================================================ */
     function renderQuickActions(event){
       const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
       const mapUrl = mapsUrlFromMetaOrLocation(meta, event.location);
@@ -1775,10 +1808,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       return `
         <div class="quick-actions">
-          <button class="qbtn" data-qaction="map" ${mapDisabled}>📍 Mapa</button>
-          <button class="qbtn" data-qaction="link" ${linkDisabled}>🔗 Link</button>
-          <button class="qbtn" data-qaction="copy">📋 Copiar</button>
-          <button class="qbtn" data-qaction="cal">📅 Calendario</button>
+          <button class="qbtn" type="button" data-qaction="map" ${mapDisabled}>📍 Mapa</button>
+          <button class="qbtn" type="button" data-qaction="link" ${linkDisabled}>🔗 Link</button>
+          <button class="qbtn" type="button" data-qaction="copy">📋 Copiar</button>
+          <button class="qbtn" type="button" data-qaction="cal">📅 Calendario</button>
         </div>
       `;
     }
@@ -1979,6 +2012,13 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
     function openModal(){
       modalBackdrop.style.display = 'flex';
+      // ✅ NUEVO: enfoque en el primer input visible
+      setTimeout(() => {
+        try{
+          const first = modalBackdrop.querySelector('.modal-body input:not(.hidden), .modal-body textarea:not(.hidden), .modal-body select:not(.hidden)');
+          if (first && first.focus) first.focus();
+        }catch(e){}
+      }, 0);
     }
     function closeModal(){
       modalBackdrop.style.display = 'none';
@@ -2053,6 +2093,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       openModal();
     }
 
+    // ✅ Router global ya maneja data-action. Mantener por compatibilidad (no rompe).
     addTripBtn.onclick = handleOpenAddTrip;
     addEventBtn.onclick = handleOpenAddEvent;
 
@@ -2272,7 +2313,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       showToast('ok', 'Viaje borrado', 'Se eliminó correctamente.');
 
-      if (activeTripId === tripId) {
+      if (activeTripId === String(tripId)) {
         clearActiveTripSelection(false);
       }
 
@@ -2304,8 +2345,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     };
 
     /* ============================================================
-      ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE (para tu request)
-      - “Timeline solo se contraiga al no estar seleccionado el viaje”
+      ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE
       - Botón “Ocultar timeline” limpia selección
     ============================================================ */
     function persistActiveTripId(){
@@ -2420,16 +2460,12 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         div.appendChild(actions);
 
         div.onclick = async () => {
-          // ✅ Si clickeas un viaje distinto, selecciona
-          // ✅ Si clickeas el mismo, NO lo deseleccionamos aquí (para evitar confusión),
-          //    usa el botón “Ocultar timeline” (más claro en móvil).
           await setActiveTrip(trip.id, true);
         };
 
         tripsDiv.appendChild(div);
       });
 
-      // ✅ Restaura último viaje (si existe). Si no, selecciona el primero (si AUTO_SELECT_FIRST_TRIP)
       const persisted = readPersistedTripId();
       const exists = persisted && data.some(t => String(t.id) === String(persisted));
 
@@ -2442,8 +2478,15 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
+    /* ============================================================
+      ✅ FASE 2.2 + 2.3: RENDER TIMELINE
+      ✅ FIX adicional: evita “stale render” si cambias de viaje rápido
+    ============================================================ */
+    let EVENTS_RENDER_TOKEN = 0; // ✅ NUEVO: token anti-carrera (si cambias de viaje mientras carga)
+
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
+      const token = ++EVENTS_RENDER_TOKEN;
 
       if (!tripId){
         eventsDiv.classList.add('muted');
@@ -2463,6 +2506,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         .order('order_index', { ascending: true, nullsFirst: false })
         .order('start_time', { ascending: true });
 
+      // ✅ Si ya cambiaste de viaje, aborta render
+      if (token !== EVENTS_RENDER_TOKEN) return;
+
       if (error) {
         eventsDiv.innerText = 'Error cargando eventos: ' + error.message;
         reportDbError('Eventos', error);
@@ -2480,7 +2526,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       LAST_EVENTS = filtered;
 
-      // ✅ Si ya hay permisos, el loop corre y puede notificar
       if (canNotify() && Notification.permission === 'granted') startNotifLoop();
       await runNotificationRules(filtered);
 
@@ -2498,6 +2543,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       DAY_KEYS_CURRENT = dayKeys.slice();
 
+      // ✅ Si acordeón activo y no hay preferencias guardadas, abre el primer día
       try{
         const raw = localStorage.getItem(collapsedStorageKey());
         const hasSaved = !!raw;
@@ -2560,10 +2606,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             const wasCollapsed = isDayCollapsed(dayKey);
 
             if (!wasCollapsed){
-              // colapsar este
               toggleDayCollapsed(dayKey);
             } else {
-              // abrir este y colapsar los demás
               const nextSet = new Set();
               DAY_KEYS_CURRENT.forEach(k => { if (k !== dayKey) nextSet.add(k); });
               COLLAPSED_DAYS = nextSet;
@@ -2717,6 +2761,16 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     }
 
     /* ============================================================
+      ✅ VIEW PREFS: hint
+    ============================================================ */
+    function paintViewHint(){
+      viewHint.textContent = accordionToggle.checked
+        ? "Acordeón activo: solo un día abierto a la vez."
+        : "Acordeón apagado: puedes abrir varios días.";
+    }
+    paintViewHint();
+
+    /* ============================================================
       ✅ AUTO-REFRESH TIMELINE
     ============================================================ */
     setInterval(() => {
@@ -2726,7 +2780,14 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     /* ============================================================
       ✅ INIT
     ============================================================ */
-    loadTrips();
+    (async () => {
+      try{
+        await loadTrips();
+      }catch(e){
+        console.error(e);
+        showToast('err','Init','Error inicializando MyTrips.');
+      }
+    })();
   </script>
 </body>
 </html>
