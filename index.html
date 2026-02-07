@@ -843,6 +843,9 @@
     const AUTO_SELECT_FIRST_TRIP = true;          // si no hay viaje guardado, selecciona el primero automáticamente
     const ONLINE_PING_TOAST = false;              // muestra toast al volver a estar online (útil si importas offline)
 
+    const TOGGLE_TRIP_ON_SECOND_CLICK = true;     // ✅ NUEVO: si clicas el MISMO viaje seleccionado, lo contrae (deselecciona)
+    const TRIP_TOGGLE_MATCH_BY = 'id';            // ✅ NUEVO: criterio para comparar (id). (Se deja fijo por claridad)
+
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
       - Para push real con service worker: siguiente paso (archivo sw.js)
@@ -2347,6 +2350,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     /* ============================================================
       ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE
       - Botón “Ocultar timeline” limpia selección
+      ✅ FIX: clic al MISMO viaje = contraer / deseleccionar
     ============================================================ */
     function persistActiveTripId(){
       try{
@@ -2459,8 +2463,17 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         div.appendChild(left);
         div.appendChild(actions);
 
+        // ✅ FIX: si clicas el mismo viaje, se contrae (deselecciona)
         div.onclick = async () => {
-          await setActiveTrip(trip.id, true);
+          const clickedId = String(trip.id);
+          const currentId = activeTripId ? String(activeTripId) : null;
+
+          if (TOGGLE_TRIP_ON_SECOND_CLICK && currentId && clickedId === currentId){
+            clearActiveTripSelection(true);
+            return;
+          }
+
+          await setActiveTrip(clickedId, true);
         };
 
         tripsDiv.appendChild(div);
