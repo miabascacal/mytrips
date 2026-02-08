@@ -846,6 +846,9 @@
     const TOGGLE_TRIP_ON_SECOND_CLICK = true;     // ✅ NUEVO: si clicas el MISMO viaje seleccionado, lo contrae (deselecciona)
     const TRIP_TOGGLE_MATCH_BY = 'id';            // ✅ NUEVO: criterio para comparar (id). (Se deja fijo por claridad)
 
+    const ICS_OPEN_INSTEAD_OF_DOWNLOAD = true;    // ✅ NUEVO: true = intenta ABRIR el .ics para que el sistema muestre “Agregar al Calendario”
+    const ICS_FALLBACK_TO_DOWNLOAD = true;        // ✅ NUEVO: true = si falla abrir el .ics, lo descarga como plan B
+
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
       - Para push real con service worker: siguiente paso (archivo sw.js)
@@ -1209,6 +1212,41 @@
       URL.revokeObjectURL(url);
     }
 
+    /* ============================================================
+      ✅ NUEVO: ABRIR .ICS EN VEZ DE SOLO DESCARGAR (para que el SO pregunte "Agregar al Calendario")
+      - En móvil, abrir el blob suele disparar el flow nativo de "Calendario"
+      - Si no se puede abrir (bloqueo de popups), hacemos fallback a download
+    ============================================================ */
+    function openIcsFile(filename, content){
+      try{
+        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+
+        // Intento 1: abrir para que el sistema lo maneje (mejor en móvil)
+        window.open(url, '_blank');
+
+        // Limpieza (damos tiempo a que el SO lo lea)
+        setTimeout(() => {
+          try{ URL.revokeObjectURL(url); }catch(e){}
+        }, 8000);
+
+        return true;
+      }catch(e){
+        return false;
+      }
+    }
+
+    function saveIcsToDevice(filename, content){
+      // Decide si abrir o descargar
+      if (ICS_OPEN_INSTEAD_OF_DOWNLOAD){
+        const ok = openIcsFile(filename, content);
+        if (ok) return;
+        if (!ICS_FALLBACK_TO_DOWNLOAD) return;
+      }
+      // fallback
+      downloadTextFile(filename, 'text/calendar', content);
+    }
+
     function toDate(value) {
       if (!value) return null;
       if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
@@ -1321,8 +1359,8 @@
 
       lines.push('END:VCALENDAR');
 
-      downloadTextFile(`mytrips_${activeTripId}.ics`, 'text/calendar', lines.join('\r\n'));
-      showToast('ok', 'Export .ics', 'Descargado. Ahora lo importas en tu calendario.');
+      saveIcsToDevice(`mytrips_${activeTripId}.ics`, lines.join('\r\n'));
+      showToast('ok', 'Export .ics', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
     }
 
     /* ============================================================
@@ -2761,8 +2799,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
                   showToast('warn', 'Calendario', 'Este evento no tiene fecha/hora válida.');
                   return;
                 }
-                downloadTextFile(`mytrips_event_${event.id || 'x'}.ics`, 'text/calendar', ics);
-                showToast('ok', 'Calendario', 'Descargado .ics del evento. Impórtalo en tu calendario.');
+                saveIcsToDevice(`mytrips_event_${event.id || 'x'}.ics`, ics);
+                showToast('ok', 'Calendario', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
                 return;
               }
             });
