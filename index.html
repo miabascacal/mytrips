@@ -849,6 +849,9 @@
     const ICS_OPEN_INSTEAD_OF_DOWNLOAD = true;    // ✅ NUEVO: true = intenta ABRIR el .ics para que el sistema muestre “Agregar al Calendario”
     const ICS_FALLBACK_TO_DOWNLOAD = true;        // ✅ NUEVO: true = si falla abrir el .ics, lo descarga como plan B
 
+    const ICS_POPUP_BLOCK_TOAST = true;           // ✅ NUEVO: si el navegador bloquea window.open(), muestra toast con instrucción
+    const ICS_REVOKE_URL_MS = 8000;               // ✅ NUEVO: ms para liberar el blob URL (deja tiempo a iOS/Android de leerlo)
+
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
       - Para push real con service worker: siguiente paso (archivo sw.js)
@@ -1214,37 +1217,81 @@
 
     /* ============================================================
       ✅ NUEVO: ABRIR .ICS EN VEZ DE SOLO DESCARGAR (para que el SO pregunte "Agregar al Calendario")
-      - En móvil, abrir el blob suele disparar el flow nativo de "Calendario"
-      - Si no se puede abrir (bloqueo de popups), hacemos fallback a download
+      - Detecta popup bloqueado y muestra toast
+      - Mejora iOS: usa click programático en <a> (más confiable que window.open en Safari)
     ============================================================ */
-    function openIcsFile(filename, content){
+    function isIOS(){
+      // ✅ iOS real (incluye iPadOS en modo "Macintosh" con touch)
+      const ua = navigator.userAgent || '';
+      const isAppleTouchMac = ua.includes('Mac') && ('ontouchend' in document);
+      return /iPad|iPhone|iPod/i.test(ua) || isAppleTouchMac;
+    }
+
+    function openViaAnchor(url){
       try{
-        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-
-        // Intento 1: abrir para que el sistema lo maneje (mejor en móvil)
-        window.open(url, '_blank');
-
-        // Limpieza (damos tiempo a que el SO lo lea)
-        setTimeout(() => {
-          try{ URL.revokeObjectURL(url); }catch(e){}
-        }, 8000);
-
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         return true;
       }catch(e){
         return false;
       }
     }
 
+    function openIcsFile(filename, content){
+      try{
+        const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+
+        let opened = false;
+        let blocked = false;
+
+        if (isIOS()){
+          // iOS: anchor click suele ser más confiable que window.open(blob)
+          opened = openViaAnchor(url);
+          blocked = !opened;
+        } else {
+          const w = window.open(url, '_blank', 'noopener');
+          blocked = !w;
+          opened = !!w;
+        }
+
+        // Limpieza (damos tiempo a que el SO lo lea)
+        setTimeout(() => {
+          try{ URL.revokeObjectURL(url); }catch(e){}
+        }, ICS_REVOKE_URL_MS);
+
+        return { opened, blocked };
+      }catch(e){
+        return { opened:false, blocked:false, error:e };
+      }
+    }
+
     function saveIcsToDevice(filename, content){
       // Decide si abrir o descargar
       if (ICS_OPEN_INSTEAD_OF_DOWNLOAD){
-        const ok = openIcsFile(filename, content);
-        if (ok) return;
-        if (!ICS_FALLBACK_TO_DOWNLOAD) return;
+        const res = openIcsFile(filename, content);
+
+        // ✅ NUEVO: popup bloqueado -> toast “pro”
+        if (ICS_POPUP_BLOCK_TOAST && res?.blocked){
+          showToast(
+            'warn',
+            'Calendario',
+            'Si no se abrió, revisa tu bloqueador o abre el archivo desde Descargas.'
+          );
+        }
+
+        if (res?.opened) return { opened:true, downloaded:false, blocked:false };
+        if (!ICS_FALLBACK_TO_DOWNLOAD) return { opened:false, downloaded:false, blocked:!!res?.blocked };
       }
+
       // fallback
       downloadTextFile(filename, 'text/calendar', content);
+      return { opened:false, downloaded:true, blocked:false };
     }
 
     function toDate(value) {
@@ -1359,8 +1406,15 @@
 
       lines.push('END:VCALENDAR');
 
-      saveIcsToDevice(`mytrips_${activeTripId}.ics`, lines.join('\r\n'));
-      showToast('ok', 'Export .ics', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
+      const result = saveIcsToDevice(`mytrips_${activeTripId}.ics`, lines.join('\r\n'));
+
+      if (result?.opened){
+        showToast('ok', 'Export .ics', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
+      } else if (result?.downloaded){
+        showToast('warn', 'Export .ics', 'Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
+      } else {
+        showToast('warn', 'Export .ics', 'No se pudo abrir/descargar el .ics. Revisa permisos/bloqueador del navegador.');
+      }
     }
 
     /* ============================================================
@@ -2799,8 +2853,15 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
                   showToast('warn', 'Calendario', 'Este evento no tiene fecha/hora válida.');
                   return;
                 }
-                saveIcsToDevice(`mytrips_event_${event.id || 'x'}.ics`, ics);
-                showToast('ok', 'Calendario', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
+                const r = saveIcsToDevice(`mytrips_event_${event.id || 'x'}.ics`, ics);
+
+                if (r?.opened){
+                  showToast('ok', 'Calendario', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
+                } else if (r?.downloaded){
+                  showToast('warn', 'Calendario', 'Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
+                } else {
+                  showToast('warn', 'Calendario', 'No se pudo abrir/descargar el .ics. Revisa permisos/bloqueador del navegador.');
+                }
                 return;
               }
             });
