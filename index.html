@@ -849,8 +849,10 @@
     const ICS_OPEN_INSTEAD_OF_DOWNLOAD = true;    // ✅ NUEVO: true = intenta ABRIR el .ics para que el sistema muestre “Agregar al Calendario”
     const ICS_FALLBACK_TO_DOWNLOAD = true;        // ✅ NUEVO: true = si falla abrir el .ics, lo descarga como plan B
 
-    const ICS_POPUP_BLOCK_TOAST = true;           // ✅ NUEVO: si el navegador bloquea window.open(), muestra toast con instrucción
-    const ICS_REVOKE_URL_MS = 8000;               // ✅ NUEVO: ms para liberar el blob URL (deja tiempo a iOS/Android de leerlo)
+    const ICS_POPUP_BLOCK_TOAST = true;           // ✅ NUEVO: si el navegador bloquea la apertura, muestra toast con instrucción (popup/descargas)
+    const ICS_REVOKE_URL_MS = 60000;              // ✅ AJUSTE: tiempo para revocar el blob URL (iOS necesita más margen)
+    const ICS_SHOW_POPUP_HINT = true;             // ✅ NUEVO: muestra hint si fue bloqueado (bloqueador/Descargas/Archivos)
+    const ICS_IOS_FORCE_LOCATION_FALLBACK = true; // ✅ NUEVO: en iOS, si open falla, usamos location.href como fallback fuerte
 
     /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
@@ -1216,9 +1218,10 @@
     }
 
     /* ============================================================
-      ✅ NUEVO: ABRIR .ICS EN VEZ DE SOLO DESCARGAR (para que el SO pregunte "Agregar al Calendario")
-      - Detecta popup bloqueado y muestra toast
-      - Mejora iOS: usa click programático en <a> (más confiable que window.open en Safari)
+      ✅ ABRIR .ICS MULTI-DISPOSITIVO (iPhone/Android/PC) — FIX PRO
+      - iOS (Chrome/Safari WebKit) es muy estricto con blob+open
+      - Estrategia: window.open → <a target=_blank> → location.href (iOS fuerte)
+      - Detecta bloqueo y muestra toast
     ============================================================ */
     function isIOS(){
       // ✅ iOS real (incluye iPadOS en modo "Macintosh" con touch)
@@ -1227,12 +1230,21 @@
       return /iPad|iPhone|iPod/i.test(ua) || isAppleTouchMac;
     }
 
-    function openViaAnchor(url){
+    function isIOSLike(){
+      const ua = navigator.userAgent || '';
+      const iOS = /iPad|iPhone|iPod/.test(ua);
+      const iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      return iOS || iPadOS;
+    }
+
+    function openViaAnchor(url, filename){
       try{
         const a = document.createElement('a');
         a.href = url;
         a.target = '_blank';
         a.rel = 'noopener';
+        // ✅ ayuda en desktop; iOS puede ignorar download, pero no estorba
+        if (filename) a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1243,55 +1255,93 @@
     }
 
     function openIcsFile(filename, content){
+      // Devuelve un objeto con diagnóstico (para toasts y fallback)
+      const result = { ok:false, blocked:false, method:'none' };
+
       try{
         const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
         const url = URL.createObjectURL(blob);
 
-        let opened = false;
-        let blocked = false;
+        const scheduleRevoke = () => {
+          setTimeout(() => {
+            try{ URL.revokeObjectURL(url); }catch(e){}
+          }, Math.max(8000, ICS_REVOKE_URL_MS || 60000));
+        };
 
-        if (isIOS()){
-          // iOS: anchor click suele ser más confiable que window.open(blob)
-          opened = openViaAnchor(url);
-          blocked = !opened;
-        } else {
-          const w = window.open(url, '_blank', 'noopener');
-          blocked = !w;
-          opened = !!w;
+        // Intento 1: window.open (cuando funciona, es el más directo)
+        let w = null;
+        try{
+          w = window.open(url, '_blank');
+        }catch(e){
+          w = null;
         }
 
-        // Limpieza (damos tiempo a que el SO lo lea)
-        setTimeout(() => {
-          try{ URL.revokeObjectURL(url); }catch(e){}
-        }, ICS_REVOKE_URL_MS);
+        if (w){
+          result.ok = true;
+          result.method = 'window.open';
+          scheduleRevoke();
+          return result;
+        }
 
-        return { opened, blocked };
+        // Sin ventana => probable bloqueo WebKit/popup
+        result.blocked = true;
+
+        // Intento 2: anchor (a veces funciona donde window.open no)
+        try{
+          const okA = openViaAnchor(url, filename || 'mytrips.ics');
+          if (okA){
+            result.ok = true;
+            result.method = 'a[target=_blank]';
+            scheduleRevoke();
+            return result;
+          }
+        }catch(e){}
+
+        // Intento 3: fallback fuerte iOS (misma pestaña)
+        if (ICS_IOS_FORCE_LOCATION_FALLBACK && isIOSLike()){
+          try{
+            window.location.href = url;
+            result.ok = true;
+            result.method = 'location.href';
+            scheduleRevoke();
+            return result;
+          }catch(e){}
+        }
+
+        // Si nada funcionó, seguimos con ok=false (saveIcsToDevice hará download si aplica)
+        scheduleRevoke();
+        return result;
+
       }catch(e){
-        return { opened:false, blocked:false, error:e };
+        return result;
       }
     }
 
     function saveIcsToDevice(filename, content){
-      // Decide si abrir o descargar
       if (ICS_OPEN_INSTEAD_OF_DOWNLOAD){
         const res = openIcsFile(filename, content);
 
-        // ✅ NUEVO: popup bloqueado -> toast “pro”
-        if (ICS_POPUP_BLOCK_TOAST && res?.blocked){
+        if (ICS_SHOW_POPUP_HINT && ICS_POPUP_BLOCK_TOAST && res && res.blocked){
           showToast(
             'warn',
-            'Calendario',
-            'Si no se abrió, revisa tu bloqueador o abre el archivo desde Descargas.'
+            'Calendario / Pop-up',
+            'Si no se abrió, revisa tu bloqueador de popups o abre el archivo desde Descargas/Archivos (iPhone) o Descargas (Android/PC).',
+            6500
           );
         }
 
-        if (res?.opened) return { opened:true, downloaded:false, blocked:false };
-        if (!ICS_FALLBACK_TO_DOWNLOAD) return { opened:false, downloaded:false, blocked:!!res?.blocked };
+        if (res && res.ok){
+          return { opened:true, method: res.method, blocked:false };
+        }
+
+        if (!ICS_FALLBACK_TO_DOWNLOAD){
+          return { opened:false, method:'none', blocked: !!(res && res.blocked) };
+        }
       }
 
-      // fallback
+      // fallback descarga (en iOS suele quedar en Archivos/Descargas)
       downloadTextFile(filename, 'text/calendar', content);
-      return { opened:false, downloaded:true, blocked:false };
+      return { opened:false, method:'download', blocked:false };
     }
 
     function toDate(value) {
@@ -1406,14 +1456,12 @@
 
       lines.push('END:VCALENDAR');
 
-      const result = saveIcsToDevice(`mytrips_${activeTripId}.ics`, lines.join('\r\n'));
+      const r = saveIcsToDevice(`mytrips_${activeTripId}.ics`, lines.join('\r\n'));
 
-      if (result?.opened){
-        showToast('ok', 'Export .ics', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
-      } else if (result?.downloaded){
-        showToast('warn', 'Export .ics', 'Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
+      if (r.method === 'download'){
+        showToast('ok', 'Export .ics', 'Listo. Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
       } else {
-        showToast('warn', 'Export .ics', 'No se pudo abrir/descargar el .ics. Revisa permisos/bloqueador del navegador.');
+        showToast('ok', 'Export .ics', 'Listo. Se intentó abrir el .ics. Si no apareció nada, revisa popups o ábrelo desde Descargas/Archivos.');
       }
     }
 
@@ -2855,12 +2903,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
                 }
                 const r = saveIcsToDevice(`mytrips_event_${event.id || 'x'}.ics`, ics);
 
-                if (r?.opened){
-                  showToast('ok', 'Calendario', 'Listo. Se abrió el .ics: el sistema debería preguntarte si deseas agregarlo al Calendario.');
-                } else if (r?.downloaded){
-                  showToast('warn', 'Calendario', 'Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
+                if (r.method === 'download'){
+                  showToast('ok', 'Calendario', 'Listo. Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
                 } else {
-                  showToast('warn', 'Calendario', 'No se pudo abrir/descargar el .ics. Revisa permisos/bloqueador del navegador.');
+                  showToast('ok', 'Calendario', 'Listo. Se intentó abrir el .ics. Si no se abrió, revisa popups o ábrelo desde Descargas/Archivos.');
                 }
                 return;
               }
