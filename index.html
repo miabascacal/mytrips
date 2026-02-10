@@ -855,6 +855,49 @@
     const ICS_IOS_FORCE_LOCATION_FALLBACK = true; // ✅ NUEVO: en iOS, si open falla, usamos location.href como fallback fuerte
 
     /* ============================================================
+      ✅ UI POR TIPO DE EVENTO
+      ✅ (FIX CRÍTICO): se define ANTES de normalizeType() para evitar TDZ
+    ============================================================ */
+    const TYPE_UI = {
+      flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
+      hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
+      activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
+      transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
+      cruise:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
+      car:      { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
+      bus:      { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
+      train:    { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
+      other:    { icon:'📌', color:'var(--other)',  bg:'var(--otherBg)',  label:'Otro' }
+    };
+
+    const TYPE_ALIASES = {
+      crucero: 'cruise',
+      cruceros: 'cruise',
+      automovil: 'car',
+      auto: 'car',
+      coche: 'car',
+      autobus: 'bus',
+      autobuses: 'bus',
+      camion: 'bus',
+      camiones: 'bus',
+      camioneta: 'car',
+      uber: 'transfer',
+      taxi: 'transfer',
+      traslado: 'transfer',
+      transferencia: 'transfer',
+      tren: 'train'
+    };
+
+    /* ============================================================
+      ✅ FASE 1 (NUEVO): NORMALIZADOR DE TIPO
+    ============================================================ */
+    function normalizeType(raw){
+      let t = (raw || '').toLowerCase().trim();
+      try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
+      return TYPE_ALIASES[t] || t;
+    }
+
+    /* ============================================================
       ✅ NUEVO: PWA INSTALL (BÁSICO)
       - Para push real con service worker: siguiente paso (archivo sw.js)
     ============================================================ */
@@ -1055,12 +1098,6 @@
       excelInput.click();
     }
 
-    function normalizeType(raw){
-      let t = (raw || '').toLowerCase().trim();
-      try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e) {}
-      return TYPE_ALIASES[t] || t;
-    }
-
     function guessEventTypeFromText(s){
       const t = String(s || '').toLowerCase();
       if (t.includes('vuelo') || t.includes('flight') || t.includes('af') || t.includes('am ')) return 'flight';
@@ -1219,17 +1256,7 @@
 
     /* ============================================================
       ✅ ABRIR .ICS MULTI-DISPOSITIVO (iPhone/Android/PC) — FIX PRO
-      - iOS (Chrome/Safari WebKit) es muy estricto con blob+open
-      - Estrategia: window.open → <a target=_blank> → location.href (iOS fuerte)
-      - Detecta bloqueo y muestra toast
     ============================================================ */
-    function isIOS(){
-      // ✅ iOS real (incluye iPadOS en modo "Macintosh" con touch)
-      const ua = navigator.userAgent || '';
-      const isAppleTouchMac = ua.includes('Mac') && ('ontouchend' in document);
-      return /iPad|iPhone|iPod/i.test(ua) || isAppleTouchMac;
-    }
-
     function isIOSLike(){
       const ua = navigator.userAgent || '';
       const iOS = /iPad|iPhone|iPod/.test(ua);
@@ -1243,7 +1270,6 @@
         a.href = url;
         a.target = '_blank';
         a.rel = 'noopener';
-        // ✅ ayuda en desktop; iOS puede ignorar download, pero no estorba
         if (filename) a.download = filename;
         document.body.appendChild(a);
         a.click();
@@ -1255,7 +1281,6 @@
     }
 
     function openIcsFile(filename, content){
-      // Devuelve un objeto con diagnóstico (para toasts y fallback)
       const result = { ok:false, blocked:false, method:'none' };
 
       try{
@@ -1268,7 +1293,6 @@
           }, Math.max(8000, ICS_REVOKE_URL_MS || 60000));
         };
 
-        // Intento 1: window.open (cuando funciona, es el más directo)
         let w = null;
         try{
           w = window.open(url, '_blank');
@@ -1283,10 +1307,8 @@
           return result;
         }
 
-        // Sin ventana => probable bloqueo WebKit/popup
         result.blocked = true;
 
-        // Intento 2: anchor (a veces funciona donde window.open no)
         try{
           const okA = openViaAnchor(url, filename || 'mytrips.ics');
           if (okA){
@@ -1297,7 +1319,6 @@
           }
         }catch(e){}
 
-        // Intento 3: fallback fuerte iOS (misma pestaña)
         if (ICS_IOS_FORCE_LOCATION_FALLBACK && isIOSLike()){
           try{
             window.location.href = url;
@@ -1308,7 +1329,6 @@
           }catch(e){}
         }
 
-        // Si nada funcionó, seguimos con ok=false (saveIcsToDevice hará download si aplica)
         scheduleRevoke();
         return result;
 
@@ -1339,7 +1359,6 @@
         }
       }
 
-      // fallback descarga (en iOS suele quedar en Archivos/Descargas)
       downloadTextFile(filename, 'text/calendar', content);
       return { opened:false, method:'download', blocked:false };
     }
@@ -1557,39 +1576,6 @@
       saveCollapsedDays();
     }
 
-    /* ============================================================
-      ✅ UI POR TIPO DE EVENTO
-    ============================================================ */
-    const TYPE_UI = {
-      flight:   { icon:'✈️', color:'var(--flight)',   bg:'var(--flightBg)',   label:'Vuelo' },
-      hotel:    { icon:'🏨', color:'var(--hotel)',    bg:'var(--hotelBg)',    label:'Hotel' },
-      activity: { icon:'🎟️', color:'var(--activity)', bg:'var(--activityBg)', label:'Actividad' },
-      transfer: { icon:'🚗', color:'var(--transfer)', bg:'var(--transferBg)', label:'Traslado' },
-      cruise:   { icon:'🛳️', color:'var(--cruise)', bg:'var(--cruiseBg)', label:'Crucero' },
-      car:      { icon:'🚘', color:'var(--car)',    bg:'var(--carBg)',    label:'Auto' },
-      bus:      { icon:'🚌', color:'var(--bus)',    bg:'var(--busBg)',    label:'Autobús' },
-      train:    { icon:'🚆', color:'var(--train)',  bg:'var(--trainBg)',  label:'Tren' },
-      other:    { icon:'📌', color:'var(--other)',  bg:'var(--otherBg)',  label:'Otro' }
-    };
-
-    const TYPE_ALIASES = {
-      crucero: 'cruise',
-      cruceros: 'cruise',
-      automovil: 'car',
-      auto: 'car',
-      coche: 'car',
-      autobus: 'bus',
-      autobuses: 'bus',
-      camion: 'bus',
-      camiones: 'bus',
-      camioneta: 'car',
-      uber: 'transfer',
-      taxi: 'transfer',
-      traslado: 'transfer',
-      transferencia: 'transfer',
-      tren: 'train'
-    };
-
     const ENABLE_DEDUP = true; // evita duplicados exactos (title + start_time)
 
     function dedupeEvents(list){
@@ -1776,7 +1762,6 @@
       }
     }
 
-    // ✅ Router global ya maneja el data-action, pero dejamos onClick por compatibilidad segura
     btnNotifs.onclick = handleEnableNotifs;
     paintNotifStatus();
 
@@ -2155,10 +2140,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
     function openModal(){
       modalBackdrop.style.display = 'flex';
-      // ✅ NUEVO: enfoque en el primer input visible
       setTimeout(() => {
         try{
-          const first = modalBackdrop.querySelector('.modal-body input:not(.hidden), .modal-body textarea:not(.hidden), .modal-body select:not(.hidden)');
+          const first = modalBackdrop.querySelector('.modal-body input, .modal-body textarea, .modal-body select');
           if (first && first.focus) first.focus();
         }catch(e){}
       }, 0);
@@ -2236,7 +2220,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       openModal();
     }
 
-    // ✅ Router global ya maneja data-action. Mantener por compatibilidad (no rompe).
     addTripBtn.onclick = handleOpenAddTrip;
     addEventBtn.onclick = handleOpenAddEvent;
 
@@ -2489,8 +2472,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
     /* ============================================================
       ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE
-      - Botón “Ocultar timeline” limpia selección
-      ✅ FIX: clic al MISMO viaje = contraer / deseleccionar
     ============================================================ */
     function persistActiveTripId(){
       try{
@@ -2603,7 +2584,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         div.appendChild(left);
         div.appendChild(actions);
 
-        // ✅ FIX: si clicas el mismo viaje, se contrae (deselecciona)
         div.onclick = async () => {
           const clickedId = String(trip.id);
           const currentId = activeTripId ? String(activeTripId) : null;
@@ -2633,9 +2613,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
     /* ============================================================
       ✅ FASE 2.2 + 2.3: RENDER TIMELINE
-      ✅ FIX adicional: evita “stale render” si cambias de viaje rápido
     ============================================================ */
-    let EVENTS_RENDER_TOKEN = 0; // ✅ NUEVO: token anti-carrera (si cambias de viaje mientras carga)
+    let EVENTS_RENDER_TOKEN = 0; // ✅ token anti-carrera
 
     async function loadEvents(tripId) {
       const eventsDiv = document.getElementById('events');
@@ -2659,7 +2638,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         .order('order_index', { ascending: true, nullsFirst: false })
         .order('start_time', { ascending: true });
 
-      // ✅ Si ya cambiaste de viaje, aborta render
       if (token !== EVENTS_RENDER_TOKEN) return;
 
       if (error) {
@@ -2696,7 +2674,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       DAY_KEYS_CURRENT = dayKeys.slice();
 
-      // ✅ Si acordeón activo y no hay preferencias guardadas, abre el primer día
       try{
         const raw = localStorage.getItem(collapsedStorageKey());
         const hasSaved = !!raw;
@@ -2917,16 +2894,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         }
       }
     }
-
-    /* ============================================================
-      ✅ VIEW PREFS: hint
-    ============================================================ */
-    function paintViewHint(){
-      viewHint.textContent = accordionToggle.checked
-        ? "Acordeón activo: solo un día abierto a la vez."
-        : "Acordeón apagado: puedes abrir varios días.";
-    }
-    paintViewHint();
 
     /* ============================================================
       ✅ AUTO-REFRESH TIMELINE
