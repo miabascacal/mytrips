@@ -601,6 +601,7 @@
   </style>
 </head>
 
+
 <body>
   <!-- ============================================================
     ✅ UI (HTML)
@@ -640,7 +641,7 @@
 
     <div class="toolbar">
       <button id="addEventBtn" class="btn" data-action="open-add-event">➕ Agregar evento</button>
-      <span class="hint">Tip: click en una tarjeta para editarla.</span>
+      <span class="hint">Tip: click en una tarjeta para ver detalle. Usa “Editar” para modificar.</span>
     </div>
 
     <!-- ============================================================
@@ -804,6 +805,7 @@
       </div>
 
       <div class="modal-actions">
+        <button id="editModeBtn" class="btn" style="display:none;" type="button">✏️ Editar</button>
         <button id="deleteBtn" class="btn danger" style="display:none;" type="button">🗑️ Borrar</button>
         <button id="saveBtn" class="btn primary" type="button">💾 Guardar</button>
       </div>
@@ -812,7 +814,6 @@
 
   <!-- ✅ FASE 2.4 (NUEVO): contenedor de toasts -->
   <div id="toastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
-
   <script>
     /* ============================================================
       ✅ CONEXIÓN A SUPABASE
@@ -853,6 +854,8 @@
     const ICS_REVOKE_URL_MS = 60000;              // ✅ AJUSTE: tiempo para revocar el blob URL (iOS necesita más margen)
     const ICS_SHOW_POPUP_HINT = true;             // ✅ NUEVO: muestra hint si fue bloqueado (bloqueador/Descargas/Archivos)
     const ICS_IOS_FORCE_LOCATION_FALLBACK = true; // ✅ NUEVO: en iOS, si open falla, usamos location.href como fallback fuerte
+
+    const DB_STORE_LOCAL_TIMESTAMP = true;        // ✅ NUEVO: guarda start_time como "YYYY-MM-DDTHH:MM(:SS)" SIN Z (evita sumar horas por timezone)
 
     /* ============================================================
       ✅ UI POR TIPO DE EVENTO
@@ -1109,13 +1112,35 @@
       return 'activity';
     }
 
+    /* ============================================================
+      ✅ FIX HORAS: guardar timestamps como LOCAL SIN "Z"
+      - Evita el bug: cada guardar sumaba offset (6/12h) y brincaba de día
+    ============================================================ */
+    function toLocalDbTimestamp(dateObj){
+      if (!dateObj || isNaN(dateObj.getTime())) return null;
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth()+1).padStart(2,'0');
+      const d = String(dateObj.getDate()).padStart(2,'0');
+      const hh = String(dateObj.getHours()).padStart(2,'0');
+      const mm = String(dateObj.getMinutes()).padStart(2,'0');
+      const ss = String(dateObj.getSeconds()).padStart(2,'0');
+      return `${y}-${m}-${d}T${hh}:${mm}:${ss}`; // SIN Z (local)
+    }
+
+    function fromLocalInputToDbTimestamp(localStr){
+      if (!localStr) return null;
+      const d = new Date(localStr);
+      if (isNaN(d.getTime())) return null;
+      return DB_STORE_LOCAL_TIMESTAMP ? toLocalDbTimestamp(d) : d.toISOString();
+    }
+
     function parsePossibleDateTime(row){
       const get = (k) => row[k] ?? row[k?.toUpperCase?.()] ?? row[k?.toLowerCase?.()] ?? null;
 
       const dt = get('start_time') || get('datetime') || get('fecha_hora') || null;
       if (dt){
         const d = new Date(dt);
-        if (!isNaN(d.getTime())) return d.toISOString();
+        if (!isNaN(d.getTime())) return DB_STORE_LOCAL_TIMESTAMP ? toLocalDbTimestamp(d) : d.toISOString();
       }
 
       const date = get('date') || get('fecha') || null;
@@ -1126,7 +1151,7 @@
         const ts = time ? String(time).slice(0,5) : DEFAULT_TIME_IF_ONLY_DATE;
         const local = `${ds}T${ts}`;
         const d = new Date(local);
-        if (!isNaN(d.getTime())) return d.toISOString();
+        if (!isNaN(d.getTime())) return DB_STORE_LOCAL_TIMESTAMP ? toLocalDbTimestamp(d) : d.toISOString();
       }
 
       return null;
@@ -1370,14 +1395,16 @@
       const s = String(value).trim();
       if (!s) return null;
 
-      if (/^\d{4}-\d{2}-\d{2}T/.test(s)){
-        let d = new Date(s);
-        if (!isNaN(d.getTime())) return d;
-        try{
-          const s2 = s.replace(' ', 'T');
-          d = new Date(s2);
-          return isNaN(d.getTime()) ? null : d;
-        }catch(e){ return null; }
+      // ISO con TZ (Z o ±hh:mm): parse normal
+      if (/[zZ]$/.test(s) || /[+\-]\d{2}:\d{2}$/.test(s)){
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      // "YYYY-MM-DDTHH:MM(:SS)" SIN TZ => tratar como local (es justo lo que queremos)
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)){
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? null : d;
       }
 
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)){
@@ -1591,8 +1618,8 @@
       return out;
     }
 
-    function fromIsoToLocalInput(iso){
-      const d = toDate(iso);
+    function fromIsoToLocalInput(dbValue){
+      const d = toDate(dbValue);
       if (!d) return '';
       const y = d.getFullYear();
       const m = String(d.getMonth()+1).padStart(2,'0');
@@ -1602,18 +1629,11 @@
       return `${y}-${m}-${day}T${hh}:${mm}`;
     }
 
-    function fromLocalInputToIso(localStr){
-      if (!localStr) return null;
-      const d = new Date(localStr);
-      if (isNaN(d.getTime())) return null;
-      return d.toISOString();
-    }
-
     function isoFromDateAndTime(dateStr, timeStr, defaultHHMM = DEFAULT_TIME_IF_ONLY_DATE){
       if (!dateStr) return null;
       const hhmm = (timeStr && /^\d{2}:\d{2}$/.test(timeStr)) ? timeStr : defaultHHMM;
       const local = `${dateStr}T${hhmm}`;
-      return fromLocalInputToIso(local);
+      return fromLocalInputToDbTimestamp(local);
     }
 
     function groupByDay(events) {
@@ -2104,13 +2124,14 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     };
 
     /* ============================================================
-      ✅ MODAL / CRUD
+      ✅ MODAL / CRUD + MODO VER/EDITAR (FIX)
     ============================================================ */
     const modalBackdrop = document.getElementById('modalBackdrop');
     const modalTitle = document.getElementById('modalTitle');
     const closeModalBtn = document.getElementById('closeModalBtn');
     const saveBtn = document.getElementById('saveBtn');
     const deleteBtn = document.getElementById('deleteBtn');
+    const editModeBtn = document.getElementById('editModeBtn');
 
     const tripForm = document.getElementById('tripForm');
     const eventForm = document.getElementById('eventForm');
@@ -2138,6 +2159,41 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     let editingEventId = null;
     let editingTripId = null;
 
+    let MODAL_VIEW_ONLY = false;                  // ✅ NUEVO: true = inputs deshabilitados; Guardar/Eliminar ocultos
+    let ORIGINAL_EVENT_START_RAW = null;          // ✅ NUEVO: para no “tocar” start_time si el usuario no cambió fecha/hora
+
+    function setFormEnabled(rootEl, enabled){
+      if (!rootEl) return;
+      rootEl.querySelectorAll('input, select, textarea').forEach(el => {
+        el.disabled = !enabled;
+      });
+    }
+
+    function paintModalMode(){
+      if (mode === 'event'){
+        if (MODAL_VIEW_ONLY){
+          // Ver
+          setFormEnabled(eventForm, false);
+          saveBtn.style.display = 'none';
+          deleteBtn.style.display = 'none';
+          editModeBtn.style.display = 'inline-block';
+          editModeBtn.textContent = '✏️ Editar';
+        } else {
+          // Editar
+          setFormEnabled(eventForm, true);
+          saveBtn.style.display = 'inline-block';
+          deleteBtn.style.display = editingEventId ? 'inline-block' : 'none';
+          editModeBtn.style.display = 'none';
+        }
+      } else {
+        // Trip siempre editable (se abre desde "Editar" explícito)
+        setFormEnabled(tripForm, true);
+        saveBtn.style.display = 'inline-block';
+        deleteBtn.style.display = editingTripId ? 'inline-block' : 'none';
+        editModeBtn.style.display = 'none';
+      }
+    }
+
     function openModal(){
       modalBackdrop.style.display = 'flex';
       setTimeout(() => {
@@ -2152,6 +2208,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       editingEventId = null;
       editingTripId = null;
       mode = "event";
+      MODAL_VIEW_ONLY = false;
+      ORIGINAL_EVENT_START_RAW = null;
     }
 
     closeModalBtn.onclick = closeModal;
@@ -2187,6 +2245,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       f_date.value = '';
       f_time.value = '';
+
+      ORIGINAL_EVENT_START_RAW = null;
     }
 
     function resetTripForm(){
@@ -2202,6 +2262,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       saveBtn.textContent = '💾 Guardar';
       resetTripForm();
       showTripForm();
+      MODAL_VIEW_ONLY = false;
+      paintModalMode();
       openModal();
     }
 
@@ -2217,19 +2279,22 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       resetEventForm();
       showEventForm();
+      MODAL_VIEW_ONLY = false; // nuevo evento = editable
+      paintModalMode();
       openModal();
     }
 
     addTripBtn.onclick = handleOpenAddTrip;
     addEventBtn.onclick = handleOpenAddEvent;
 
-    function openModalEditEvent(event){
+    function openModalViewEvent(event){
       editingEventId = event.id;
 
-      modalTitle.textContent = 'Editar evento';
-      deleteBtn.style.display = 'inline-block';
+      modalTitle.textContent = 'Detalle del evento';
       saveBtn.textContent = '💾 Guardar cambios';
+      deleteBtn.style.display = 'none';
 
+      // llenar form
       f_title.value = event.title || '';
       f_type.value = normalizeType(event.type || 'other');
       f_start.value = fromIsoToLocalInput(event.start_time);
@@ -2238,6 +2303,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_source.value = event.source || 'manual';
       f_desc.value = event.description || '';
 
+      // fallback date/time
       const d = toDate(event.start_time);
       if (d){
         const y = d.getFullYear();
@@ -2259,7 +2325,13 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         f_meta.value = '';
       }
 
+      ORIGINAL_EVENT_START_RAW = event.start_time || null;
+
       showEventForm();
+
+      // ✅ abre en modo VER (no cambia nada si solo cierran)
+      MODAL_VIEW_ONLY = true;
+      paintModalMode();
       openModal();
     }
 
@@ -2275,9 +2347,22 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       t_end.value = trip.end_date ? String(trip.end_date).slice(0,10) : '';
 
       showTripForm();
+      MODAL_VIEW_ONLY = false;
+      paintModalMode();
       openModal();
     }
 
+    // ✅ Botón "Editar" dentro del modal cuando estás en vista
+    editModeBtn.onclick = () => {
+      if (mode !== 'event' || !editingEventId) return;
+      MODAL_VIEW_ONLY = false;
+      modalTitle.textContent = 'Editar evento';
+      paintModalMode();
+    };
+
+    /* ============================================================
+      ✅ GUARDAR (Trip/Event) — FIX HORAS + NO EDIT ACCIDENTAL
+    ============================================================ */
     saveBtn.onclick = async () => {
       if (mode === "trip") {
         const title = t_title.value.trim();
@@ -2331,6 +2416,12 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
+      // ✅ si por alguna razón intentan guardar estando en VIEW, bloqueamos
+      if (MODAL_VIEW_ONLY){
+        showToast('info', 'Modo vista', 'Toca “Editar” para modificar y guardar.');
+        return;
+      }
+
       if (!activeTripId) {
         showToast('warn', 'Evento', 'Primero selecciona un viaje.');
         return;
@@ -2342,21 +2433,28 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
+      // ✅ Detectar si usuario realmente cambió fecha/hora
       const rawStart = (f_start.value || '').trim();
-      let startIso = null;
+      const ds = (f_date.value || '').trim();
+      const ts = (f_time.value || '').trim();
+
+      let startDb = null;
 
       if (rawStart) {
-        startIso = fromLocalInputToIso(rawStart);
-        if (!startIso) startIso = null;
+        startDb = fromLocalInputToDbTimestamp(rawStart);
+      } else if (ds) {
+        startDb = isoFromDateAndTime(ds, ts, DEFAULT_TIME_IF_ONLY_DATE);
       } else {
-        const ds = (f_date.value || '').trim();
-        const ts = (f_time.value || '').trim();
-        if (ds){
-          startIso = isoFromDateAndTime(ds, ts, DEFAULT_TIME_IF_ONLY_DATE);
-          if (!startIso) startIso = null;
-        } else {
-          startIso = null;
-        }
+        startDb = null;
+      }
+
+      // ✅ Si estamos editando y el usuario NO tocó nada de fecha/hora, conservamos el valor original
+      // (evita cambios accidentales y protege contra bugs)
+      const userProvidedAnyTime =
+        !!rawStart || !!ds || !!ts;
+
+      if (editingEventId && !userProvidedAnyTime && ORIGINAL_EVENT_START_RAW){
+        startDb = ORIGINAL_EVENT_START_RAW;
       }
 
       const orderIndex = f_order.value === '' ? null : Number(f_order.value);
@@ -2376,7 +2474,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         trip_id: activeTripId,
         title,
         type: f_type.value,
-        start_time: startIso,
+        start_time: startDb,
         order_index: (Number.isFinite(orderIndex) ? orderIndex : null),
         location: f_location.value.trim() || null,
         source: f_source.value || 'manual',
@@ -2831,7 +2929,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             downPt = null;
 
             if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
-              openModalEditEvent(event);
+              // ✅ ahora abre "detalle" (modo vista), NO edición
+              openModalViewEvent(event);
             }
           });
 
@@ -2916,3 +3015,5 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
   </script>
 </body>
 </html>
+
+  
