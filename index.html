@@ -1,4 +1,7 @@
---- INICIO PARTE 1/2 ---
+<!-- =========================
+PARTE 1/2 — INICIO
+(Corte seguro en </head>)
+========================= -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -55,8 +58,13 @@
       --trainBg: rgba(15,118,110,.10);
 
       --ui-click-z: 50; /* ✅z-index base para elementos clicables (anti-overlay) */
-
       --focus: rgba(37,99,235,.22); /* ✅color de foco accesible */
+
+      --timelineIconSize: 30px; /* ✅NUEVO: tamaño de ícono en cards del timeline (más chico) */
+      --timelineIconFont: 14px; /* ✅NUEVO: tamaño del emoji/icono dentro del cuadro del timeline */
+      --timelineBtnFont: 11px;  /* ✅NUEVO: tamaño de texto para botones/chips dentro de Timeline */
+      --timelineBtnPadY: 6px;   /* ✅NUEVO: padding Y para botones compactos del Timeline */
+      --timelineBtnPadX: 10px;  /* ✅NUEVO: padding X para botones compactos del Timeline */
     }
 
     /* ============================================================
@@ -64,7 +72,7 @@
       - Evita overlays / capas que “se coman” clicks
       - Mejora tap en móvil
     ============================================================ */
-    button, a, [role="button"], .btn, .clickable, .icon-btn, .qbtn, .chip, .toggle{
+    button, a, [role="button"], .btn, .clickable, .icon-btn, .qbtn, .chip, .toggle, .copy-badge{
       position: relative;
       z-index: var(--ui-click-z);
       pointer-events: auto;
@@ -115,6 +123,30 @@
     }
 
     .muted { color: var(--muted); font-size: 13px; }
+
+    /* ============================================================
+      ✅ TIMELINE COMPACTO (UI)
+      - Reduce tamaños de botones / chips / iconos SOLO dentro de #timelineSection
+    ============================================================ */
+    #timelineSection .toolbar .btn{
+      padding: var(--timelineBtnPadY) var(--timelineBtnPadX);
+      font-size: var(--timelineBtnFont);
+      border-radius: 10px;
+    }
+    #timelineSection .hint{ font-size: 11px; }
+    #timelineSection .filters input, #timelineSection .filters select{
+      padding: 8px 10px;
+      font-size: 13px;
+      border-radius: 10px;
+    }
+    #timelineSection .chip{
+      padding: 5px 9px;
+      font-size: 11px;
+    }
+    #timelineSection .toggle{
+      padding: 6px 10px;
+      font-size: 11px;
+    }
 
     /* ============================================================
       ✅ LISTA DE VIAJES (TRIPS)
@@ -208,13 +240,13 @@
     }
 
     .icon{
-      width: 40px;
-      height: 40px;
+      width: var(--timelineIconSize);
+      height: var(--timelineIconSize);
       border-radius: 10px;
       display:flex;
       align-items:center;
       justify-content:center;
-      font-size: 18px;
+      font-size: var(--timelineIconFont);
       flex: 0 0 auto;
       margin-top: 2px;
     }
@@ -257,11 +289,11 @@
     .qbtn{
       border: 1px solid var(--border);
       background: #fff;
-      padding: 6px 10px;
+      padding: 5px 9px; /* ✅ más compacto */
       border-radius: 999px;
       cursor: pointer;
-      font-weight: 800;
-      font-size: 12px;
+      font-weight: 900;
+      font-size: 11px; /* ✅ más chico */
       user-select: none;
     }
     .qbtn:active{ transform: translateY(1px); }
@@ -343,6 +375,12 @@
     }
     .pro-badge strong{ color:#111; font-weight: 700; }
     .pro-badge a{ color: inherit; text-decoration: underline; }
+
+    .copy-badge{
+      cursor: pointer;
+      user-select: none;
+    }
+    .copy-badge:active{ transform: translateY(1px); }
 
     /* ============================================================
       ✅ TOOLBAR NOTIFICACIONES
@@ -602,8 +640,10 @@
   </style>
 </head>
 
-  --- INICIO PARTE 2/2 ---
-
+<!-- =========================
+PARTE 2/2 — INICIO
+(Corte seguro en </body>)
+========================= -->
 
 <body>
   <!-- ============================================================
@@ -629,66 +669,89 @@
 
     <h2>Timeline</h2>
 
-    <div class="toolbar">
-      <button id="enableNotifs" class="btn" data-action="enable-notifs">🔔 Activar notificaciones</button>
-      <button id="exportIcsBtn" class="btn" data-action="export-ics">📅 Exportar .ics</button>
-      <button id="importBtn" class="btn" data-action="open-import">📥 Importar (Excel/PDF)</button>
-      <button id="shareWaBtn" class="btn" data-action="share-whatsapp">🟢 WhatsApp</button>
-      <button id="shareTgBtn" class="btn" data-action="share-telegram">🔵 Telegram</button>
-      <span id="notifStatus" class="hint"></span>
-    </div>
+    <!-- ✅ NUEVO: wrapper para que el “compacto” aplique SOLO a Timeline -->
+    <div id="timelineSection">
+      <div class="toolbar">
+        <button id="enableNotifs" class="btn" data-action="enable-notifs">🔔 Activar notificaciones</button>
 
-    <!-- ✅ Import inputs (ocultos): no rompen UI -->
-    <input id="excelInput" type="file" accept=".xlsx,.xls" class="hidden" />
-    <input id="pdfInput" type="file" accept="application/pdf" multiple class="hidden" />
+        <!-- ✅ iPhone plan B visible: export por día / próximos N -->
+        <button id="exportIcsBtn" class="btn" data-action="export-ics">📅 Exportar .ics</button>
+        <button id="exportIcsDayBtn" class="btn" data-action="export-ics-day" title="Exporta solo el día seleccionado (iPhone friendly)">📅 .ics (día)</button>
+        <button id="exportIcsNextBtn" class="btn" data-action="export-ics-next" title="Exporta próximos N eventos (iPhone friendly)">📅 .ics (próx)</button>
 
-    <div class="toolbar">
-      <button id="addEventBtn" class="btn" data-action="open-add-event">➕ Agregar evento</button>
-      <span class="hint">Tip: click en una tarjeta para ver detalle. Usa “Editar” para modificar.</span>
-    </div>
+        <button id="importBtn" class="btn" data-action="open-import">📥 Importar (Excel/PDF)</button>
+        <button id="shareWaBtn" class="btn" data-action="share-whatsapp">🟢 WhatsApp</button>
+        <button id="shareTgBtn" class="btn" data-action="share-telegram">🔵 Telegram</button>
 
-    <!-- ============================================================
-      ✅ FASE 2.2 (NUEVO): BUSCADOR + FILTROS + VISTA RÁPIDA
-    ============================================================ -->
-    <div class="filters">
-      <input id="searchInput" placeholder="🔎 Buscar (título, descripción, lugar, metadata, etc.)" />
-      <select id="typeFilter">
-        <option value="">Todos los tipos</option>
-        <option value="flight">flight</option>
-        <option value="hotel">hotel</option>
-        <option value="activity">activity</option>
-        <option value="transfer">transfer</option>
-        <option value="cruise">cruise</option>
-        <option value="car">car</option>
-        <option value="bus">bus</option>
-        <option value="train">train</option>
-        <option value="other">other</option>
-      </select>
-    </div>
+        <!-- ✅ NUEVO: toggle auto-refresh -->
+        <label class="toggle" title="Si lo apagas, MyTrips NO recarga sola (no te borra pruebas)">
+          <input id="autoRefreshToggle" type="checkbox" />
+          Auto-refresh
+        </label>
 
-    <div class="chipbar" aria-label="Vista rápida">
-      <div class="chip active" data-range="all">Todo</div>
-      <div class="chip" data-range="today">Hoy</div>
-      <div class="chip" data-range="tomorrow">Mañana</div>
-      <div class="chip" data-range="next7">Próximos 7 días</div>
-    </div>
+        <span id="notifStatus" class="hint"></span>
+      </div>
 
-    <!-- ============================================================
-      ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA
-    ============================================================ -->
-    <div class="view-controls">
-      <button id="expandAllBtn" class="btn">➕ Expandir todo</button>
-      <button id="collapseAllBtn" class="btn">➖ Colapsar todo</button>
+      <!-- ✅ NUEVO: panel de ayuda iPhone (visible cuando detecta iOS o si falla open) -->
+      <div id="icsHelp" class="empty hidden" style="margin-top:10px;">
+        <strong>📱 iPhone / iPad: si NO se abre el Calendario</strong><br/>
+        1) Usa <strong>📅 .ics (día)</strong> o <strong>📅 .ics (próx)</strong> (más ligero).<br/>
+        2) Si se descarga: abre el archivo desde <strong>Archivos</strong> → <strong>Descargas</strong> y toca “Agregar al calendario”.<br/>
+        3) Revisa bloqueador de popups / permisos del navegador.
+      </div>
 
-      <label class="toggle" title="Si está activo, al abrir un día se cierran los demás">
-        <input id="accordionToggle" type="checkbox" />
-        Modo acordeón
-      </label>
+      <!-- ✅ Import inputs (ocultos): no rompen UI -->
+      <input id="excelInput" type="file" accept=".xlsx,.xls" class="hidden" />
+      <input id="pdfInput" type="file" accept="application/pdf" multiple class="hidden" />
 
-      <span id="viewHint" class="hint"></span>
-    </div>
+      <div class="toolbar">
+        <button id="addEventBtn" class="btn" data-action="open-add-event">➕ Agregar evento</button>
+        <span class="hint">Tip: tap en una tarjeta para ver detalle (no edita). Usa “Editar” dentro del modal.</span>
+      </div>
 
-    <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
+      <!-- ============================================================
+        ✅ FASE 2.2 (NUEVO): BUSCADOR + FILTROS + VISTA RÁPIDA
+      ============================================================ -->
+      <div class="filters">
+        <input id="searchInput" placeholder="🔎 Buscar (título, descripción, lugar, metadata, etc.)" />
+        <select id="typeFilter">
+          <option value="">Todos los tipos</option>
+          <option value="flight">flight</option>
+          <option value="hotel">hotel</option>
+          <option value="activity">activity</option>
+          <option value="transfer">transfer</option>
+          <option value="cruise">cruise</option>
+          <option value="car">car</option>
+          <option value="bus">bus</option>
+          <option value="train">train</option>
+          <option value="other">other</option>
+        </select>
+      </div>
+
+      <div class="chipbar" aria-label="Vista rápida">
+        <div class="chip active" data-range="all">Todo</div>
+        <div class="chip" data-range="today">Hoy</div>
+        <div class="chip" data-range="tomorrow">Mañana</div>
+        <div class="chip" data-range="next7">Próximos 7 días</div>
+      </div>
+
+      <!-- ============================================================
+        ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA
+      ============================================================ -->
+      <div class="view-controls">
+        <button id="expandAllBtn" class="btn">➕ Expandir todo</button>
+        <button id="collapseAllBtn" class="btn">➖ Colapsar todo</button>
+
+        <label class="toggle" title="Si está activo, al abrir un día se cierran los demás">
+          <input id="accordionToggle" type="checkbox" />
+          Modo acordeón
+        </label>
+
+        <span id="viewHint" class="hint"></span>
+      </div>
+
+      <div id="events" class="muted">Selecciona un viaje para ver su timeline.</div>
+    </div><!-- /#timelineSection -->
   </div>
 
   <!-- ============================================================
@@ -794,6 +857,16 @@
               <input id="f_desc" placeholder="Notas rápidas, documentos, recomendaciones, etc." />
             </div>
 
+            <!-- ✅ NUEVO: número de reserva (se guarda en metadata.booking_ref) -->
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Número de reserva / referencia</label>
+              <input id="f_booking_ref" placeholder="Ej. PNR / Confirmación / Reserva (copiable)" />
+              <div class="modal-hint">
+                - Se guarda en metadata.booking_ref (no rompe tu schema).<br/>
+                - Lo verás como badge en la tarjeta y podrás tocar para copiar.
+              </div>
+            </div>
+
             <div class="field" style="grid-column: 1 / -1;">
               <label>Metadata (JSON)</label>
               <textarea id="f_meta" placeholder='Ej: {"airline":"AirFrance","flight_number":"AF0175","checkin_url":"https://..."}'></textarea>
@@ -817,6 +890,7 @@
 
   <!-- ✅ FASE 2.4 (NUEVO): contenedor de toasts -->
   <div id="toastWrap" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
   <script>
     /* ============================================================
       ✅ CONEXIÓN A SUPABASE
@@ -859,6 +933,13 @@
     const ICS_IOS_FORCE_LOCATION_FALLBACK = true; // ✅ NUEVO: en iOS, si open falla, usamos location.href como fallback fuerte
 
     const DB_STORE_LOCAL_TIMESTAMP = true;        // ✅ NUEVO: guarda start_time como "YYYY-MM-DDTHH:MM(:SS)" SIN Z (evita sumar horas por timezone)
+
+    const AUTO_REFRESH_DEFAULT_ON = false;        // ✅ NUEVO: default del auto-refresh al cargar (yo lo dejo APAGADO para tus pruebas)
+    const AUTO_REFRESH_STORAGE_KEY = 'mytrips:autoRefreshOn'; // ✅ NUEVO: recuerda preferencia auto-refresh
+    const AUTO_REFRESH_DISABLE_TOAST = true;      // ✅ NUEVO: muestra toast cuando se desactiva para que sepas que ya no te “borra” pruebas
+
+    const ICS_LIGHTWEIGHT_NEXT_N = 12;            // ✅ NUEVO: # eventos “próximos” para export rápido (iPhone friendly)
+    const ICS_HELP_SHOW_ON_IOS = true;            // ✅ NUEVO: si detecta iOS, muestra ayuda visible
 
     /* ============================================================
       ✅ UI POR TIPO DE EVENTO
@@ -995,6 +1076,15 @@
     paintNet();
 
     /* ============================================================
+      ✅ NUEVO: helper para mostrar ayuda iPhone (.ics)
+    ============================================================ */
+    const icsHelp = document.getElementById('icsHelp');
+    function showIcsHelp(show){
+      if (!icsHelp) return;
+      icsHelp.classList.toggle('hidden', !show);
+    }
+
+    /* ============================================================
       ✅ NUEVO: MEJOR DIAGNÓSTICO DE ERRORES (RLS / policies / 403)
     ============================================================ */
     function looksLikeRLS(error){
@@ -1063,6 +1153,14 @@
           exportIcsForActiveTrip();
           break;
 
+        case 'export-ics-day':
+          exportIcsForActiveTripDay();
+          break;
+
+        case 'export-ics-next':
+          exportIcsForActiveTripNext();
+          break;
+
         case 'open-import':
           openImportFlow();
           break;
@@ -1087,6 +1185,59 @@
           console.warn('Acción no mapeada:', action);
       }
     }, true);
+
+    /* ============================================================
+      ✅ NUEVO: AUTO-REFRESH toggle (sin borrar pruebas)
+    ============================================================ */
+    const autoRefreshToggle = document.getElementById('autoRefreshToggle');
+    let AUTO_REFRESH_TIMER = null; // ✅ NUEVO: id del timer
+
+    function readAutoRefreshPref(){
+      try{
+        const v = localStorage.getItem(AUTO_REFRESH_STORAGE_KEY);
+        if (v === null || v === undefined) return AUTO_REFRESH_DEFAULT_ON;
+        return v === '1';
+      }catch(e){
+        return AUTO_REFRESH_DEFAULT_ON;
+      }
+    }
+
+    function persistAutoRefreshPref(on){
+      try{ localStorage.setItem(AUTO_REFRESH_STORAGE_KEY, on ? '1' : '0'); }catch(e){}
+    }
+
+    function stopAutoRefresh(){
+      if (AUTO_REFRESH_TIMER) clearInterval(AUTO_REFRESH_TIMER);
+      AUTO_REFRESH_TIMER = null;
+    }
+
+    function startAutoRefresh(){
+      stopAutoRefresh();
+      AUTO_REFRESH_TIMER = setInterval(() => {
+        if (activeTripId) loadEvents(activeTripId);
+      }, REFRESH_MS);
+    }
+
+    function applyAutoRefreshPref(on, silent = false){
+      if (!autoRefreshToggle) return;
+      autoRefreshToggle.checked = !!on;
+      persistAutoRefreshPref(!!on);
+
+      if (on) startAutoRefresh();
+      else {
+        stopAutoRefresh();
+        if (!silent && AUTO_REFRESH_DISABLE_TOAST){
+          showToast('info','Auto-refresh','Desactivado. MyTrips ya NO recargará sola (ideal para pruebas).', 5200);
+        }
+      }
+    }
+
+    if (autoRefreshToggle){
+      autoRefreshToggle.addEventListener('change', () => {
+        applyAutoRefreshPref(!!autoRefreshToggle.checked, false);
+      });
+      applyAutoRefreshPref(readAutoRefreshPref(), true);
+    }
 
     /* ============================================================
       ✅ FASE 1 (NUEVO): IMPORTACIÓN RÁPIDA (Excel + PDFs)
@@ -1376,6 +1527,8 @@
             'Si no se abrió, revisa tu bloqueador de popups o abre el archivo desde Descargas/Archivos (iPhone) o Descargas (Android/PC).',
             6500
           );
+          // ✅ mostrar ayuda visible (plan B)
+          if (ICS_HELP_SHOW_ON_IOS && isIOSLike()) showIcsHelp(true);
         }
 
         if (res && res.ok){
@@ -1388,6 +1541,7 @@
       }
 
       downloadTextFile(filename, 'text/calendar', content);
+      if (ICS_HELP_SHOW_ON_IOS && isIOSLike()) showIcsHelp(true);
       return { opened:false, method:'download', blocked:false };
     }
 
@@ -1511,6 +1665,122 @@
         showToast('ok', 'Export .ics', 'Listo. Se descargó el .ics. Ábrelo desde Descargas/Archivos para agregarlo al Calendario.');
       } else {
         showToast('ok', 'Export .ics', 'Listo. Se intentó abrir el .ics. Si no apareció nada, revisa popups o ábrelo desde Descargas/Archivos.');
+      }
+    }
+
+    /* ============================================================
+      ✅ NUEVO: Export .ics por DÍA (iPhone plan B)
+    ============================================================ */
+    function getSelectedDayKeyOrFirst(){
+      // usa el primer día visible (no sin-fecha) si existe
+      const k = (DAY_KEYS_CURRENT || []).find(x => x !== 'sin-fecha') || (DAY_KEYS_CURRENT || [])[0] || null;
+      return k;
+    }
+
+    async function exportIcsForActiveTripDay(){
+      if (!activeTripId){
+        showToast('warn','Export .ics','Primero selecciona un viaje.');
+        return;
+      }
+
+      const dayKey = getSelectedDayKeyOrFirst();
+      if (!dayKey){
+        showToast('warn','Export .ics (día)','No hay eventos para exportar.');
+        return;
+      }
+
+      const list = (LAST_EVENTS || []).filter(ev => {
+        const d = toDate(ev.start_time);
+        if (!d) return dayKey === 'sin-fecha';
+        const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        return k === dayKey;
+      });
+
+      if (!list.length){
+        showToast('warn','Export .ics (día)','No hay eventos en ese día.');
+        return;
+      }
+
+      const nowStamp = icsDateUTC(new Date());
+      const lines = [];
+      lines.push('BEGIN:VCALENDAR');
+      lines.push('VERSION:2.0');
+      lines.push('PRODID:-//MyTrips//EN');
+      lines.push('CALSCALE:GREGORIAN');
+      lines.push('METHOD:PUBLISH');
+
+      for (const ev of list){
+        const start = toDate(ev.start_time);
+        if (!start) continue;
+        const end = new Date(start.getTime() + 60*60*1000);
+        const uid = `${ev.id || Math.random().toString(16).slice(2)}@mytrips`;
+        lines.push('BEGIN:VEVENT');
+        lines.push(`UID:${uid}`);
+        lines.push(`DTSTAMP:${nowStamp}`);
+        lines.push(`DTSTART:${icsDateUTC(start)}`);
+        lines.push(`DTEND:${icsDateUTC(end)}`);
+        lines.push(`SUMMARY:${icsEsc(ev.title || 'Evento')}`);
+        if (ev.description) lines.push(`DESCRIPTION:${icsEsc(ev.description)}`);
+        if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
+        lines.push('END:VEVENT');
+      }
+
+      lines.push('END:VCALENDAR');
+
+      const r = saveIcsToDevice(`mytrips_${activeTripId}_${dayKey}.ics`, lines.join('\r\n'));
+      if (r.method === 'download'){
+        showToast('ok','Export .ics (día)','Listo. Descargado. Ábrelo desde Archivos/Descargas para agregar al Calendario.');
+      } else {
+        showToast('ok','Export .ics (día)','Listo. Se intentó abrir. Si no se abrió, revisa popups o abre desde Archivos/Descargas.');
+      }
+    }
+
+    /* ============================================================
+      ✅ NUEVO: Export .ics Próximos N (iPhone plan B)
+    ============================================================ */
+    async function exportIcsForActiveTripNext(){
+      if (!activeTripId){
+        showToast('warn','Export .ics','Primero selecciona un viaje.');
+        return;
+      }
+
+      const list = (LAST_EVENTS || []).slice(0, ICS_LIGHTWEIGHT_NEXT_N);
+      if (!list.length){
+        showToast('warn','Export .ics (próx)','No hay eventos para exportar.');
+        return;
+      }
+
+      const nowStamp = icsDateUTC(new Date());
+      const lines = [];
+      lines.push('BEGIN:VCALENDAR');
+      lines.push('VERSION:2.0');
+      lines.push('PRODID:-//MyTrips//EN');
+      lines.push('CALSCALE:GREGORIAN');
+      lines.push('METHOD:PUBLISH');
+
+      for (const ev of list){
+        const start = toDate(ev.start_time);
+        if (!start) continue;
+        const end = new Date(start.getTime() + 60*60*1000);
+        const uid = `${ev.id || Math.random().toString(16).slice(2)}@mytrips`;
+        lines.push('BEGIN:VEVENT');
+        lines.push(`UID:${uid}`);
+        lines.push(`DTSTAMP:${nowStamp}`);
+        lines.push(`DTSTART:${icsDateUTC(start)}`);
+        lines.push(`DTEND:${icsDateUTC(end)}`);
+        lines.push(`SUMMARY:${icsEsc(ev.title || 'Evento')}`);
+        if (ev.description) lines.push(`DESCRIPTION:${icsEsc(ev.description)}`);
+        if (ev.location) lines.push(`LOCATION:${icsEsc(ev.location)}`);
+        lines.push('END:VEVENT');
+      }
+
+      lines.push('END:VCALENDAR');
+
+      const r = saveIcsToDevice(`mytrips_${activeTripId}_next${ICS_LIGHTWEIGHT_NEXT_N}.ics`, lines.join('\r\n'));
+      if (r.method === 'download'){
+        showToast('ok','Export .ics (próx)','Listo. Descargado. Ábrelo desde Archivos/Descargas para agregar al Calendario.');
+      } else {
+        showToast('ok','Export .ics (próx)','Listo. Se intentó abrir. Si no se abrió, revisa popups o abre desde Archivos/Descargas.');
       }
     }
 
@@ -1823,6 +2093,29 @@
       return alerts.length ? `<div class="alert-row">${alerts.join('')}</div>` : '';
     }
 
+    async function copyText(txt){
+      try{
+        await navigator.clipboard.writeText(String(txt || ''));
+        showToast('ok','Copiar','Copiado al portapapeles.');
+        return true;
+      }catch(e){
+        const ta = document.createElement('textarea');
+        ta.value = String(txt || '');
+        document.body.appendChild(ta);
+        ta.select();
+        try{
+          document.execCommand('copy');
+          showToast('ok','Copiar','Copiado al portapapeles.');
+          document.body.removeChild(ta);
+          return true;
+        }catch(_e){
+          document.body.removeChild(ta);
+          showToast('err','Copiar','No se pudo copiar.');
+          return false;
+        }
+      }
+    }
+
     function renderProBadges(event){
       const meta = event.metadata;
       const badges = [];
@@ -1844,6 +2137,15 @@
       }
 
       const type = normalizeType(event.type);
+
+      // ✅ NUEVO: booking_ref en badge tocable (copiar)
+      if (meta.booking_ref){
+        badges.push(
+          `<span class="pro-badge copy-badge" data-copy="${esc(meta.booking_ref)}" title="Toca para copiar">
+            <strong>Ref:</strong> ${esc(meta.booking_ref)} · <u>copiar</u>
+          </span>`
+        );
+      }
 
       if (type === 'activity' && meta.subtype) {
         const st = normalizeType(meta.subtype);
@@ -1931,22 +2233,7 @@ Lugar: ${event.location || ''}
 Tipo: ${event.type || ''}
 ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim();
 
-      try{
-        await navigator.clipboard.writeText(txt);
-        showToast('ok', 'Copiar', 'Copiado al portapapeles.');
-      }catch(e){
-        const ta = document.createElement('textarea');
-        ta.value = txt;
-        document.body.appendChild(ta);
-        ta.select();
-        try{
-          document.execCommand('copy');
-          showToast('ok', 'Copiar', 'Copiado al portapapeles.');
-        }catch(_e){
-          showToast('err', 'Copiar', 'No se pudo copiar.');
-        }
-        document.body.removeChild(ta);
-      }
+      await copyText(txt);
     }
 
     function renderQuickActions(event){
@@ -2155,6 +2442,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     const f_date = document.getElementById('f_date');
     const f_time = document.getElementById('f_time');
 
+    const f_booking_ref = document.getElementById('f_booking_ref'); // ✅ NUEVO: input de referencia
+
     const addEventBtn = document.getElementById('addEventBtn');
     const addTripBtn = document.getElementById('addTripBtn');
 
@@ -2189,7 +2478,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           editModeBtn.style.display = 'none';
         }
       } else {
-        // Trip siempre editable (se abre desde "Editar" explícito)
+        // Trip siempre editable
         setFormEnabled(tripForm, true);
         saveBtn.style.display = 'inline-block';
         deleteBtn.style.display = editingTripId ? 'inline-block' : 'none';
@@ -2249,6 +2538,8 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_date.value = '';
       f_time.value = '';
 
+      f_booking_ref.value = ''; // ✅ NUEVO: limpiar referencia
+
       ORIGINAL_EVENT_START_RAW = null;
     }
 
@@ -2282,7 +2573,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
 
       resetEventForm();
       showEventForm();
-      MODAL_VIEW_ONLY = false; // nuevo evento = editable
+      MODAL_VIEW_ONLY = false;
       paintModalMode();
       openModal();
     }
@@ -2297,7 +2588,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       saveBtn.textContent = '💾 Guardar cambios';
       deleteBtn.style.display = 'none';
 
-      // llenar form
       f_title.value = event.title || '';
       f_type.value = normalizeType(event.type || 'other');
       f_start.value = fromIsoToLocalInput(event.start_time);
@@ -2324,15 +2614,16 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       try {
         const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
         f_meta.value = JSON.stringify(meta, null, 2);
+        f_booking_ref.value = meta.booking_ref ? String(meta.booking_ref) : ''; // ✅ NUEVO
       } catch(e) {
         f_meta.value = '';
+        f_booking_ref.value = '';
       }
 
       ORIGINAL_EVENT_START_RAW = event.start_time || null;
 
       showEventForm();
 
-      // ✅ abre en modo VER (no cambia nada si solo cierran)
       MODAL_VIEW_ONLY = true;
       paintModalMode();
       openModal();
@@ -2355,7 +2646,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       openModal();
     }
 
-    // ✅ Botón "Editar" dentro del modal cuando estás en vista
     editModeBtn.onclick = () => {
       if (mode !== 'event' || !editingEventId) return;
       MODAL_VIEW_ONLY = false;
@@ -2419,7 +2709,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
-      // ✅ si por alguna razón intentan guardar estando en VIEW, bloqueamos
       if (MODAL_VIEW_ONLY){
         showToast('info', 'Modo vista', 'Toca “Editar” para modificar y guardar.');
         return;
@@ -2436,7 +2725,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         return;
       }
 
-      // ✅ Detectar si usuario realmente cambió fecha/hora
       const rawStart = (f_start.value || '').trim();
       const ds = (f_date.value || '').trim();
       const ts = (f_time.value || '').trim();
@@ -2451,8 +2739,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         startDb = null;
       }
 
-      // ✅ Si estamos editando y el usuario NO tocó nada de fecha/hora, conservamos el valor original
-      // (evita cambios accidentales y protege contra bugs)
       const userProvidedAnyTime =
         !!rawStart || !!ds || !!ts;
 
@@ -2470,6 +2756,16 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         } catch (e) {
           showToast('warn', 'Metadata', 'No es JSON válido. Corrígelo o déjalo vacío.');
           return;
+        }
+      }
+
+      // ✅ NUEVO: si el usuario pone booking ref, guardarlo en metadata.booking_ref
+      const bookingRef = (f_booking_ref.value || '').trim();
+      if (bookingRef) metaObj.booking_ref = bookingRef;
+      else {
+        // si está vacío, no forzamos borrar; pero si existía y el usuario lo vació en edición, sí borramos
+        if (editingEventId && metaObj && typeof metaObj === 'object' && 'booking_ref' in metaObj && !bookingRef){
+          delete metaObj.booking_ref;
         }
       }
 
@@ -2504,7 +2800,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         .select('*')
         .single();
 
-        // ✅ FIX: evitar error por indent/código corrupto (mantener igual, solo mejora)
       if (error) {
         reportDbError('Guardar evento', error);
         return;
@@ -2909,22 +3204,25 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
           `;
 
           /* ============================================================
-            ✅ TAP vs SCROLL + BLOQUEO REAL EN BOTONES
+            ✅ TAP vs SCROLL + BLOQUEO REAL EN BOTONES / BADGES COPIABLES
           ============================================================ */
           function isQuickActionTarget(el){
             try{ return !!(el && el.closest && el.closest('.qbtn')); }catch(e){ return false; }
+          }
+          function isCopyBadgeTarget(el){
+            try{ return !!(el && el.closest && el.closest('.copy-badge')); }catch(e){ return false; }
           }
 
           let downPt = null;
           let blockEditUntil = 0;
 
           card.addEventListener('pointerdown', (e) => {
-            if (isQuickActionTarget(e.target)) { downPt = null; return; }
+            if (isQuickActionTarget(e.target) || isCopyBadgeTarget(e.target)) { downPt = null; return; }
             downPt = { x: e.clientX, y: e.clientY };
           });
 
           card.addEventListener('pointerup', (e) => {
-            if (isQuickActionTarget(e.target)) { downPt = null; return; }
+            if (isQuickActionTarget(e.target) || isCopyBadgeTarget(e.target)) { downPt = null; return; }
             if (Date.now() < blockEditUntil) { downPt = null; return; }
 
             if (!downPt) return;
@@ -2933,11 +3231,41 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             downPt = null;
 
             if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
-              // ✅ ahora abre "detalle" (modo vista), NO edición
-              openModalViewEvent(event);
+              openModalViewEvent(event); // ✅ detalle (vista)
             }
           });
 
+          // ✅ badges tocables para copiar (booking_ref etc.)
+          card.querySelectorAll('.copy-badge').forEach(b => {
+            const arm = (e) => {
+              try{
+                blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS;
+                downPt = null;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              }catch(_e){}
+            };
+
+            b.addEventListener('pointerdown', arm, { capture:true });
+            b.addEventListener('touchstart', arm, { capture:true, passive:false });
+
+            b.addEventListener('click', async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+              blockEditUntil = Date.now() + CARD_BLOCK_EDIT_AFTER_QACTION_MS;
+
+              const txt = b.getAttribute('data-copy') || '';
+              if (!txt){
+                showToast('warn','Copiar','No hay texto para copiar.');
+                return;
+              }
+              await copyText(txt);
+            });
+          });
+
+          // ✅ quick actions
           card.querySelectorAll('.qbtn').forEach(btn => {
             const armBlock = (e) => {
               try{
@@ -2999,17 +3327,13 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     }
 
     /* ============================================================
-      ✅ AUTO-REFRESH TIMELINE
-    ============================================================ */
-    setInterval(() => {
-      if (activeTripId) loadEvents(activeTripId);
-    }, REFRESH_MS);
-
-    /* ============================================================
       ✅ INIT
     ============================================================ */
     (async () => {
       try{
+        // ✅ mostrar ayuda iOS desde el inicio si aplica
+        if (ICS_HELP_SHOW_ON_IOS && isIOSLike() && ICS_HELP_SHOW_ON_IOS) showIcsHelp(true);
+
         await loadTrips();
       }catch(e){
         console.error(e);
@@ -3019,4 +3343,3 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
   </script>
 </body>
 </html>
-
