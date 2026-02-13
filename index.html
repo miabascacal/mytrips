@@ -3411,6 +3411,33 @@ function closeModal(){
         showToast('err','Init','Error inicializando MyTrips.');
       }
     })();
+
+/* ============================================================
+  ✅ NUEVO: copiar badge con feedback visual (Reserva/Ref)
+============================================================ */
+async function copyBadgeWithFeedback(el, text){
+  if (!text) return false;
+
+  const originalHTML = el.innerHTML;
+
+  try{
+    await navigator.clipboard.writeText(text);
+
+    el.classList.add('copied');
+    el.innerHTML = `<span class="meta-ico">✔</span><strong>Copiado</strong>`;
+
+    setTimeout(() => {
+      el.classList.remove('copied');
+      el.innerHTML = originalHTML;
+    }, 1200);
+
+  }catch(err){
+    console.error("No se pudo copiar:", err);
+  }
+
+  return true;
+}
+       
   </script>
 </body>
 </html>
