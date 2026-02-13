@@ -2848,11 +2848,13 @@ function closeModal(){
         }
       }
 
-      const bookingRef = (f_booking_ref.value || '').trim();
-      if (bookingRef) metaObj.booking_ref = bookingRef;
-      else {
-        if (editingEventId && metaObj && typeof metaObj === 'object' && 'booking_ref' in metaObj && !bookingRef){
-          delete metaObj.booking_ref;
+        const bookingRef = (f_booking_ref.value || '').trim();
+        
+        // ✅ Regla nueva:
+        // 1) Si el input trae valor, mandamos ese valor (es “source of truth”)
+        // 2) Si el input está vacío, NO tocamos lo que venga en el JSON (si lo pegaste ahí, se queda)
+        if (bookingRef) {
+          metaObj.booking_ref = bookingRef;
         }
       }
 
