@@ -1,7 +1,3 @@
-<!-- =========================
-PARTE 1/2 — INICIO
-(Corte seguro en </head>)
-========================= -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -65,6 +61,11 @@ PARTE 1/2 — INICIO
       --timelineBtnFont: 11px;  /* ✅NUEVO: tamaño de texto para botones/chips dentro de Timeline */
       --timelineBtnPadY: 6px;   /* ✅NUEVO: padding Y para botones compactos del Timeline */
       --timelineBtnPadX: 10px;  /* ✅NUEVO: padding X para botones compactos del Timeline */
+
+      --modalTopGap: 18px;      /* ✅NUEVO: margen superior del modal en móvil (evita “irse arriba”) */
+      --modalBottomGap: 18px;   /* ✅NUEVO: margen inferior del modal en móvil */
+      --modalMaxH: 88vh;        /* ✅NUEVO: alto máximo del modal para que SIEMPRE sea usable en móvil */
+      --modalBodyMaxH: 72vh;    /* ✅NUEVO: alto máximo del body del modal (scroll interno) */
     }
 
     /* ============================================================
@@ -96,6 +97,12 @@ PARTE 1/2 — INICIO
       margin: 0;
       background: var(--bg);
       color: var(--text);
+    }
+
+    /* ✅ NUEVO: cuando el modal está abierto, bloqueamos scroll de fondo (se activa por JS en PARTE 2) */
+    body.modal-open{
+      overflow: hidden; /* ✅ evita que el contenido de fondo “empuje” el modal en móvil */
+      touch-action: none;
     }
 
     .container{
@@ -491,6 +498,7 @@ PARTE 1/2 — INICIO
 
     /* ============================================================
       ✅ CRUD: MODAL + FORM
+      ✅ FIX MÓVIL: modal siempre usable (no se “pierde” hacia arriba)
     ============================================================ */
     .modal-backdrop{
       position: fixed;
@@ -501,6 +509,8 @@ PARTE 1/2 — INICIO
       justify-content: center;
       padding: 18px;
       z-index: 9999;
+      overflow: auto; /* ✅ permite que el backdrop haga scroll si fuera necesario */
+      -webkit-overflow-scrolling: touch;
     }
 
     .modal{
@@ -510,6 +520,10 @@ PARTE 1/2 — INICIO
       border-radius: 14px;
       box-shadow: 0 20px 60px rgba(0,0,0,.18);
       overflow: hidden;
+
+      max-height: var(--modalMaxH); /* ✅ evita que el modal salga de pantalla */
+      display: flex;
+      flex-direction: column; /* ✅ header + body + actions */
     }
 
     .modal-head{
@@ -518,9 +532,16 @@ PARTE 1/2 — INICIO
       justify-content: space-between;
       align-items:center;
       border-bottom: 1px solid var(--border);
+      flex: 0 0 auto;
     }
 
-    .modal-body{ padding: 14px; }
+    .modal-body{
+      padding: 14px;
+      overflow: auto;                 /* ✅ scroll interno del form */
+      -webkit-overflow-scrolling: touch;
+      max-height: var(--modalBodyMaxH); /* ✅ mantiene visibles botones en móvil */
+      flex: 1 1 auto;
+    }
 
     .grid{
       display:grid;
@@ -545,6 +566,8 @@ PARTE 1/2 — INICIO
       outline: none;
       font-size: 14px;
       box-sizing: border-box;
+
+      scroll-margin-top: 90px; /* ✅ NUEVO: cuando enfoca, que no quede “arriba escondido” */
     }
     .field textarea{
       min-height: 90px;
@@ -560,6 +583,8 @@ PARTE 1/2 — INICIO
       justify-content: flex-end;
       border-top: 1px solid var(--border);
       flex-wrap: wrap;
+      flex: 0 0 auto;
+      background: #fff;
     }
     .modal-hint{
       font-size: 12px;
@@ -568,6 +593,25 @@ PARTE 1/2 — INICIO
       line-height: 1.35;
     }
     .hidden{ display:none !important; }
+
+    /* ✅ FIX iPhone: safe-area + modal arriba */
+    @supports (padding: env(safe-area-inset-top)){
+      .modal-backdrop{
+        padding-top: calc(var(--modalTopGap) + env(safe-area-inset-top));
+        padding-bottom: calc(var(--modalBottomGap) + env(safe-area-inset-bottom));
+      }
+    }
+
+    /* ✅ FIX móvil: en pantallas chicas, alinear modal hacia arriba (no centrado) */
+    @media (max-width: 520px){
+      .modal-backdrop{
+        align-items: flex-start; /* ✅ evita que al abrir teclado “se pierda” */
+        justify-content: center;
+      }
+      .modal{
+        margin-top: var(--modalTopGap);
+      }
+    }
 
     /* ============================================================
       ✅ FASE 2.4: TOASTS / POPUPS NO BLOQUEANTES
@@ -643,6 +687,12 @@ PARTE 1/2 — INICIO
 <!-- =========================
 PARTE 2/2 — INICIO
 (Corte seguro en </body>)
+RESUMEN DE ESTA PARTE:
+- UI Timeline compacta + toolbars alineadas (botones/chips más chicos).
+- “Reserva/Referencia” como campo visible (badge tocable para copiar) sin abrir edición.
+- FIX “clics en botones rápidos”: usa pointerdown/touchstart con bloqueo real (no abre modal al tocar Mapa/Link/Copiar/Calendario).
+- Auto-refresh apagado por default + toggle persistente (para que no te borre pruebas).
+- FIX móvil: modal centrado y usable (scroll interno del modal, no “se va arriba”).
 ========================= -->
 
 <body>
@@ -756,6 +806,10 @@ PARTE 2/2 — INICIO
 
   <!-- ============================================================
     ✅ MODAL ÚNICO (EVENTS + TRIPS)
+    ✅ FIX MÓVIL: el modal no “se va arriba” y permite llenar inputs:
+      - backdrop align-items:flex-start en móvil
+      - modal con max-height y overflow-y:auto
+      - body del modal con scroll interno
   ============================================================ -->
   <div id="modalBackdrop" class="modal-backdrop">
     <div class="modal">
@@ -857,7 +911,7 @@ PARTE 2/2 — INICIO
               <input id="f_desc" placeholder="Notas rápidas, documentos, recomendaciones, etc." />
             </div>
 
-            <!-- ✅ NUEVO: número de reserva (se guarda en metadata.booking_ref) -->
+            <!-- ✅ NUEVO: número de reserva / referencia -->
             <div class="field" style="grid-column: 1 / -1;">
               <label>Número de reserva / referencia</label>
               <input id="f_booking_ref" placeholder="Ej. PNR / Confirmación / Reserva (copiable)" />
@@ -1668,11 +1722,7 @@ PARTE 2/2 — INICIO
       }
     }
 
-    /* ============================================================
-      ✅ NUEVO: Export .ics por DÍA (iPhone plan B)
-    ============================================================ */
     function getSelectedDayKeyOrFirst(){
-      // usa el primer día visible (no sin-fecha) si existe
       const k = (DAY_KEYS_CURRENT || []).find(x => x !== 'sin-fecha') || (DAY_KEYS_CURRENT || [])[0] || null;
       return k;
     }
@@ -1735,9 +1785,6 @@ PARTE 2/2 — INICIO
       }
     }
 
-    /* ============================================================
-      ✅ NUEVO: Export .ics Próximos N (iPhone plan B)
-    ============================================================ */
     async function exportIcsForActiveTripNext(){
       if (!activeTripId){
         showToast('warn','Export .ics','Primero selecciona un viaje.');
@@ -1784,9 +1831,6 @@ PARTE 2/2 — INICIO
       }
     }
 
-    /* ============================================================
-      ✅ SHARE WhatsApp/Telegram (BÁSICO)
-    ============================================================ */
     function formatDay(d) {
       return d.toLocaleDateString('es-MX', { dateStyle: 'medium' });
     }
@@ -1951,11 +1995,6 @@ PARTE 2/2 — INICIO
       return sign < 0 ? `hace ${txt}` : `en ${txt}`;
     }
 
-    /* ============================================================
-      ✅ NOTIFICACIONES (browser-only)
-      - Requiere pestaña abierta
-      - Push real: siguiente fase con service worker
-    ============================================================ */
     function canNotify() {
       return ("Notification" in window);
     }
@@ -2058,9 +2097,6 @@ PARTE 2/2 — INICIO
     btnNotifs.onclick = handleEnableNotifs;
     paintNotifStatus();
 
-    /* ============================================================
-      ✅ ALERTAS + PRO BADGES + QUICK ACTIONS
-    ============================================================ */
     function renderAlerts(event){
       const type = normalizeType(event.type);
       const meta = event.metadata && typeof event.metadata === 'object' ? event.metadata : {};
@@ -2138,7 +2174,6 @@ PARTE 2/2 — INICIO
 
       const type = normalizeType(event.type);
 
-      // ✅ NUEVO: booking_ref en badge tocable (copiar)
       if (meta.booking_ref){
         badges.push(
           `<span class="pro-badge copy-badge" data-copy="${esc(meta.booking_ref)}" title="Toca para copiar">
@@ -2254,9 +2289,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       `;
     }
 
-    /* ============================================================
-      ✅ FASE 2.2 (NUEVO): ESTADO FILTROS
-    ============================================================ */
     const searchInput = document.getElementById('searchInput');
     const typeFilter = document.getElementById('typeFilter');
     let RANGE_FILTER = 'all';
@@ -2343,9 +2375,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       return true;
     }
 
-    /* ============================================================
-      ✅ FASE 2.2 (NUEVO): CONTROLES DE VISTA
-    ============================================================ */
     const expandAllBtn = document.getElementById('expandAllBtn');
     const collapseAllBtn = document.getElementById('collapseAllBtn');
     const accordionToggle = document.getElementById('accordionToggle');
@@ -2413,9 +2442,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       collapseAllDays();
     };
 
-    /* ============================================================
-      ✅ MODAL / CRUD + MODO VER/EDITAR (FIX)
-    ============================================================ */
     const modalBackdrop = document.getElementById('modalBackdrop');
     const modalTitle = document.getElementById('modalTitle');
     const closeModalBtn = document.getElementById('closeModalBtn');
@@ -2464,21 +2490,18 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
     function paintModalMode(){
       if (mode === 'event'){
         if (MODAL_VIEW_ONLY){
-          // Ver
           setFormEnabled(eventForm, false);
           saveBtn.style.display = 'none';
           deleteBtn.style.display = 'none';
           editModeBtn.style.display = 'inline-block';
           editModeBtn.textContent = '✏️ Editar';
         } else {
-          // Editar
           setFormEnabled(eventForm, true);
           saveBtn.style.display = 'inline-block';
           deleteBtn.style.display = editingEventId ? 'inline-block' : 'none';
           editModeBtn.style.display = 'none';
         }
       } else {
-        // Trip siempre editable
         setFormEnabled(tripForm, true);
         saveBtn.style.display = 'inline-block';
         deleteBtn.style.display = editingTripId ? 'inline-block' : 'none';
@@ -2486,23 +2509,40 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
-    function openModal(){
-      modalBackdrop.style.display = 'flex';
-      setTimeout(() => {
-        try{
-          const first = modalBackdrop.querySelector('.modal-body input, .modal-body textarea, .modal-body select');
-          if (first && first.focus) first.focus();
-        }catch(e){}
-      }, 0);
-    }
-    function closeModal(){
-      modalBackdrop.style.display = 'none';
-      editingEventId = null;
-      editingTripId = null;
-      mode = "event";
-      MODAL_VIEW_ONLY = false;
-      ORIGINAL_EVENT_START_RAW = null;
-    }
+function openModal(){
+  modalBackdrop.style.display = 'flex';
+
+  // ✅ evita scroll detrás y “brincos” en iOS/Android
+  try{ document.body.classList.add('modal-open'); }catch(e){}
+
+  // ✅ asegurar que el backdrop esté arriba (si venías scrolleando)
+  try{ modalBackdrop.scrollTop = 0; }catch(e){}
+
+  setTimeout(() => {
+    try{
+      // ✅ focus al primer campo visible
+      const first = modalBackdrop.querySelector('.modal-body input, .modal-body textarea, .modal-body select');
+      if (first && first.focus) first.focus({ preventScroll: false });
+
+      // ✅ asegura que el encabezado del modal quede visible en móvil
+      const modalEl = modalBackdrop.querySelector('.modal');
+      if (modalEl && modalEl.scrollIntoView) modalEl.scrollIntoView({ block: 'start' });
+    }catch(e){}
+  }, 0);
+}
+
+function closeModal(){
+  modalBackdrop.style.display = 'none';
+
+  // ✅ re-habilita scroll normal
+  try{ document.body.classList.remove('modal-open'); }catch(e){}
+
+  editingEventId = null;
+  editingTripId = null;
+  mode = "event";
+  MODAL_VIEW_ONLY = false;
+  ORIGINAL_EVENT_START_RAW = null;
+}
 
     closeModalBtn.onclick = closeModal;
 
@@ -2538,7 +2578,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_date.value = '';
       f_time.value = '';
 
-      f_booking_ref.value = ''; // ✅ NUEVO: limpiar referencia
+      f_booking_ref.value = '';
 
       ORIGINAL_EVENT_START_RAW = null;
     }
@@ -2596,7 +2636,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       f_source.value = event.source || 'manual';
       f_desc.value = event.description || '';
 
-      // fallback date/time
       const d = toDate(event.start_time);
       if (d){
         const y = d.getFullYear();
@@ -2614,7 +2653,7 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       try {
         const meta = (event.metadata && typeof event.metadata === 'object') ? event.metadata : {};
         f_meta.value = JSON.stringify(meta, null, 2);
-        f_booking_ref.value = meta.booking_ref ? String(meta.booking_ref) : ''; // ✅ NUEVO
+        f_booking_ref.value = meta.booking_ref ? String(meta.booking_ref) : '';
       } catch(e) {
         f_meta.value = '';
         f_booking_ref.value = '';
@@ -2653,9 +2692,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       paintModalMode();
     };
 
-    /* ============================================================
-      ✅ GUARDAR (Trip/Event) — FIX HORAS + NO EDIT ACCIDENTAL
-    ============================================================ */
     saveBtn.onclick = async () => {
       if (mode === "trip") {
         const title = t_title.value.trim();
@@ -2759,11 +2795,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
         }
       }
 
-      // ✅ NUEVO: si el usuario pone booking ref, guardarlo en metadata.booking_ref
       const bookingRef = (f_booking_ref.value || '').trim();
       if (bookingRef) metaObj.booking_ref = bookingRef;
       else {
-        // si está vacío, no forzamos borrar; pero si existía y el usuario lo vació en edición, sí borramos
         if (editingEventId && metaObj && typeof metaObj === 'object' && 'booking_ref' in metaObj && !bookingRef){
           delete metaObj.booking_ref;
         }
@@ -2867,9 +2901,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       loadEvents(activeTripId);
     };
 
-    /* ============================================================
-      ✅ NUEVO: SELECCIÓN / DESELECCIÓN DE VIAJE
-    ============================================================ */
     function persistActiveTripId(){
       try{
         if (!activeTripId) localStorage.removeItem(LAST_TRIP_STORAGE_KEY);
@@ -3008,9 +3039,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
-    /* ============================================================
-      ✅ FASE 2.2 + 2.3: RENDER TIMELINE
-    ============================================================ */
     let EVENTS_RENDER_TOKEN = 0; // ✅ token anti-carrera
 
     async function loadEvents(tripId) {
@@ -3203,9 +3231,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             </div>
           `;
 
-          /* ============================================================
-            ✅ TAP vs SCROLL + BLOQUEO REAL EN BOTONES / BADGES COPIABLES
-          ============================================================ */
           function isQuickActionTarget(el){
             try{ return !!(el && el.closest && el.closest('.qbtn')); }catch(e){ return false; }
           }
@@ -3231,11 +3256,10 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             downPt = null;
 
             if (dx <= CARD_TAP_MAX_MOVE_PX && dy <= CARD_TAP_MAX_MOVE_PX) {
-              openModalViewEvent(event); // ✅ detalle (vista)
+              openModalViewEvent(event);
             }
           });
 
-          // ✅ badges tocables para copiar (booking_ref etc.)
           card.querySelectorAll('.copy-badge').forEach(b => {
             const arm = (e) => {
               try{
@@ -3265,7 +3289,6 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
             });
           });
 
-          // ✅ quick actions
           card.querySelectorAll('.qbtn').forEach(btn => {
             const armBlock = (e) => {
               try{
@@ -3326,14 +3349,9 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
       }
     }
 
-    /* ============================================================
-      ✅ INIT
-    ============================================================ */
     (async () => {
       try{
-        // ✅ mostrar ayuda iOS desde el inicio si aplica
         if (ICS_HELP_SHOW_ON_IOS && isIOSLike() && ICS_HELP_SHOW_ON_IOS) showIcsHelp(true);
-
         await loadTrips();
       }catch(e){
         console.error(e);
@@ -3343,3 +3361,4 @@ ${event.description ? `Descripción: ${event.description}` : ''}${metaTxt}`.trim
   </script>
 </body>
 </html>
+
