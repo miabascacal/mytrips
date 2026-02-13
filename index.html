@@ -549,7 +549,11 @@
       gap: 10px;
     }
     @media (max-width: 720px){
-      .grid{ grid-template-columns: 1fr; }
+     .grid{ grid-template-columns: 1fr; }
+      /* iOS: evita zoom automático si el font-size es muy chico */
+     .field input, .field select, .field textarea{
+      font-size: 16px;
+  }
     }
 
     .field label{
