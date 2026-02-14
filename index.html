@@ -3639,6 +3639,20 @@ function closeModal(){
 const compactToggle = document.getElementById('compactToggle');
 const COMPACT_STORAGE_KEY = 'mytrips:compactOn';
 
+/* ============================================================
+  ✅ DETECCIÓN iOS REAL (iPhone/iPad)
+============================================================ */
+function isIOSReal(){
+  try{
+    const ua = navigator.userAgent || '';
+    const iOSUA = /iPhone|iPad|iPod/i.test(ua);
+    const iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    return iOSUA || iPadOS;
+  }catch(e){
+    return false;
+  }
+}
+
 function readCompactPref(){
   try { return localStorage.getItem(COMPACT_STORAGE_KEY) === '1'; }
   catch(e){ return false; }
@@ -3667,13 +3681,16 @@ if (compactToggle){
     applyCompact(compactToggle.checked);
   });
 
-  // 🔥 AUTO-COMPACT EN MÓVIL (solo primera vez)
-  const IS_MOBILE = window.matchMedia('(max-width: 820px)').matches;
+  const IS_IOS = isIOSReal();
+  const IS_SMALL = window.matchMedia('(max-width: 820px)').matches;
 
-  if (IS_MOBILE && !hasCompactPref()){
-    applyCompact(true);   // móvil: compacto por defecto
+  // 🔥 Regla inteligente:
+  // iOS → compacto por defecto primera vez
+  // Pantalla pequeña → compacto por defecto primera vez
+  if ((IS_IOS || IS_SMALL) && !hasCompactPref()){
+    applyCompact(true);
   } else {
-    applyCompact(readCompactPref()); // respeta preferencia guardada
+    applyCompact(readCompactPref());
   }
 
 } else {
@@ -3735,6 +3752,24 @@ async function copyBadgeWithFeedback(el, text){
     apply(on);
   });
 })();
+
+/* ============================================================
+  ✅ DETECCIÓN iOS REAL (iPhone/iPad) — sin depender del ancho
+============================================================ */
+
+function isIOSReal(){
+  try{
+    const ua = navigator.userAgent || '';
+    const iOSUA = /iPhone|iPad|iPod/i.test(ua);
+
+    // iPadOS moderno puede decir "Mac" pero con touch
+    const iPadOS = (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    return iOSUA || iPadOS;
+  }catch(e){
+    return false;
+  }
+}
     
   </script>
 </body>
