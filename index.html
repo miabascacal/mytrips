@@ -3625,7 +3625,37 @@ async function copyBadgeWithFeedback(el, text){
 
   return true;
 }
-       
+
+// =========================
+// ✅ Toggle: Modo compacto (UI + timeline)
+// =========================
+(() => {
+  const compactToggle = document.getElementById("compactToggle");
+  if (!compactToggle) return;
+
+  const KEY = "mytrips_compact_mode";
+
+  const apply = (on) => {
+    document.body.classList.toggle("is-compact", !!on);
+  };
+
+  const saved = localStorage.getItem(KEY);
+
+  if (saved !== null) {
+    const on = saved === "1";
+    compactToggle.checked = on;
+    apply(on);
+  } else {
+    apply(false);
+  }
+
+  compactToggle.addEventListener("change", () => {
+    const on = compactToggle.checked;
+    localStorage.setItem(KEY, on ? "1" : "0");
+    apply(on);
+  });
+})();
+    
   </script>
 </body>
 </html>
