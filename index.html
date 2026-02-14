@@ -790,6 +790,99 @@ body.compact h2{ font-size: 18px !important; }
 body.compact #timelineSection .hint{
   font-size: 11px !important;
 }
+
+/* =========================
+   ✅ FIX MODAL EN iOS (NO SE CORTA)
+   - Scroll interno
+   - Respeta notch (safe-area)
+   - Usa 100dvh (mejor en Safari móvil)
+========================= */
+.modal {
+  position: fixed;
+  inset: 0;
+  padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom));
+  overflow: hidden; /* el scroll lo hace el contenido */
+}
+
+.modal .modal-content,
+.modal .content,
+.modal .panel, 
+.modal .card { 
+  /* si tu modal usa otro nombre, no pasa nada; lo importante es el contenedor real */
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Header del modal “pegajoso” (si tienes header dentro) */
+.modal .modal-header,
+.modal header {
+  position: sticky;
+  top: 0;
+  background: inherit;
+  z-index: 5;
+}
+
+/* Extra: que el botón cerrar no quede pegado al notch */
+.modal .close,
+.modal .btn-close {
+  margin-top: 2px;
+}
+    
+/* =========================
+   ✅ MODO COMPACTO (reduce UI + timeline)
+========================= */
+body.is-compact .toolbar .btn {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+body.is-compact .toolbar {
+  gap: 6px;
+}
+
+body.is-compact .toolbar .btn .icon,
+body.is-compact .toolbar .btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Ajusta tarjetas del timeline (ejemplo típico) */
+body.is-compact .event-card,
+body.is-compact .timeline-card,
+body.is-compact .trip-card {
+  padding: 10px 12px;
+}
+
+body.is-compact .event-card .title,
+body.is-compact .timeline-card .title {
+  font-size: 14px;
+}
+
+body.is-compact .event-card .meta,
+body.is-compact .timeline-card .meta {
+  font-size: 12px;
+}
+
+/* =========================
+   ✅ TOOLBAR MÁS CHICA (default)
+========================= */
+.toolbar .btn {
+  padding: 8px 12px;
+  font-size: 14px;
+  border-radius: 10px;
+}
+
+.toolbar {
+  gap: 8px;
+  flex-wrap: wrap; /* ayuda en móvil */
+}
+
+.toolbar .btn .icon,
+.toolbar .btn svg {
+  width: 16px;
+  height: 16px;
+}
     
   </style>
 </head>
