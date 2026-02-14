@@ -2746,164 +2746,166 @@ function closeModal(){
     };
 
     saveBtn.onclick = async () => {
-      if (mode === "trip") {
-        const title = t_title.value.trim();
-        if (!title) {
-          showToast('warn', 'Viaje', 'El nombre del viaje es obligatorio.');
-          return;
-        }
-
-        const payload = {
-          title,
-          start_date: t_start.value || null,
-          end_date: t_end.value || null
-        };
-
-        if (!editingTripId) {
-          const { data, error } = await sb.from('trips').insert(payload).select('*').single();
-          if (error) {
-            reportDbError('Crear viaje', error);
-            return;
-          }
-          showToast('ok', 'Viaje creado', 'Listo. Ya puedes agregar eventos.');
-          closeModal();
-          await loadTrips();
-          if (data?.id) {
-            setActiveTrip(data.id, true);
-          }
-          return;
-        }
-
-        const { data, error } = await sb
-          .from('trips')
-          .update(payload)
-          .eq('id', editingTripId)
-          .select('*')
-          .single();
-
-        if (error) {
-          reportDbError('Guardar viaje', error);
-          return;
-        }
-
-        if (!data) {
-          showToast('warn', 'Guardar viaje', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
-        } else {
-          showToast('ok', 'Viaje actualizado', 'Cambios guardados.');
-        }
-
-        closeModal();
-        await loadTrips();
-        if (activeTripId) await loadEvents(activeTripId);
-        return;
-      }
-
-      if (MODAL_VIEW_ONLY){
-        showToast('info', 'Modo vista', 'Toca “Editar” para modificar y guardar.');
-        return;
-      }
-
-      if (!activeTripId) {
-        showToast('warn', 'Evento', 'Primero selecciona un viaje.');
-        return;
-      }
-
-      const title = f_title.value.trim();
+    if (mode === "trip") {
+      const title = t_title.value.trim();
       if (!title) {
-        showToast('warn', 'Evento', 'El título es obligatorio.');
+        showToast('warn', 'Viaje', 'El nombre del viaje es obligatorio.');
         return;
-      }
-
-      const rawStart = (f_start.value || '').trim();
-      const ds = (f_date.value || '').trim();
-      const ts = (f_time.value || '').trim();
-
-      let startDb = null;
-
-      if (rawStart) {
-        startDb = fromLocalInputToDbTimestamp(rawStart);
-      } else if (ds) {
-        startDb = isoFromDateAndTime(ds, ts, DEFAULT_TIME_IF_ONLY_DATE);
-      } else {
-        startDb = null;
-      }
-
-      const userProvidedAnyTime =
-        !!rawStart || !!ds || !!ts;
-
-      if (editingEventId && !userProvidedAnyTime && ORIGINAL_EVENT_START_RAW){
-        startDb = ORIGINAL_EVENT_START_RAW;
-      }
-
-      const orderIndex = f_order.value === '' ? null : Number(f_order.value);
-
-      let metaObj = {};
-      const metaRaw = f_meta.value.trim();
-      if (metaRaw) {
-        try {
-          metaObj = JSON.parse(metaRaw);
-        } catch (e) {
-          showToast('warn', 'Metadata', 'No es JSON válido. Corrígelo o déjalo vacío.');
-          return;
-        }
-      }
-
-        const bookingRef = (f_booking_ref.value || '').trim();
-        
-        // ✅ Regla nueva:
-        // 1) Si el input trae valor, mandamos ese valor (es “source of truth”)
-        // 2) Si el input está vacío, NO tocamos lo que venga en el JSON (si lo pegaste ahí, se queda)
-        if (bookingRef) {
-          metaObj.booking_ref = bookingRef;
-        }
       }
 
       const payload = {
-        trip_id: activeTripId,
         title,
-        type: f_type.value,
-        start_time: startDb,
-        order_index: (Number.isFinite(orderIndex) ? orderIndex : null),
-        location: f_location.value.trim() || null,
-        source: f_source.value || 'manual',
-        description: f_desc.value.trim() || null,
-        metadata: metaObj
+        start_date: t_start.value || null,
+        end_date: t_end.value || null
       };
 
-      if (!editingEventId) {
-        const { error } = await sb.from('events').insert(payload);
+      if (!editingTripId) {
+        const { data, error } = await sb.from('trips').insert(payload).select('*').single();
         if (error) {
-          reportDbError('Crear evento', error);
+          reportDbError('Crear viaje', error);
           return;
         }
-        showToast('ok', 'Evento creado', 'Guardado correctamente.');
+        showToast('ok', 'Viaje creado', 'Listo. Ya puedes agregar eventos.');
         closeModal();
-        loadEvents(activeTripId);
+        await loadTrips();
+        if (data?.id) {
+          setActiveTrip(data.id, true);
+        }
         return;
       }
 
       const { data, error } = await sb
-        .from('events')
+        .from('trips')
         .update(payload)
-        .eq('id', editingEventId)
+        .eq('id', editingTripId)
         .select('*')
         .single();
 
       if (error) {
-        reportDbError('Guardar evento', error);
+        reportDbError('Guardar viaje', error);
         return;
       }
 
       if (!data) {
-        showToast('warn', 'Guardar evento', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
+        showToast('warn', 'Guardar viaje', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
       } else {
-        showToast('ok', 'Evento actualizado', 'Cambios guardados.');
+        showToast('ok', 'Viaje actualizado', 'Cambios guardados.');
       }
 
       closeModal();
-      loadEvents(activeTripId);
+      await loadTrips();
+      if (activeTripId) await loadEvents(activeTripId);
+      return;
+    }
+
+    // =========================
+    // EVENTOS
+    // =========================
+    if (MODAL_VIEW_ONLY){
+      showToast('info', 'Modo vista', 'Toca “Editar” para modificar y guardar.');
+      return;
+    }
+
+    if (!activeTripId) {
+      showToast('warn', 'Evento', 'Primero selecciona un viaje.');
+      return;
+    }
+
+    const title = f_title.value.trim();
+    if (!title) {
+      showToast('warn', 'Evento', 'El título es obligatorio.');
+      return;
+    }
+
+    const rawStart = (f_start.value || '').trim();
+    const ds = (f_date.value || '').trim();
+    const ts = (f_time.value || '').trim();
+
+    let startDb = null;
+
+    if (rawStart) {
+      startDb = fromLocalInputToDbTimestamp(rawStart);
+    } else if (ds) {
+      startDb = isoFromDateAndTime(ds, ts, DEFAULT_TIME_IF_ONLY_DATE);
+    } else {
+      startDb = null;
+    }
+
+    const userProvidedAnyTime = !!rawStart || !!ds || !!ts;
+
+    if (editingEventId && !userProvidedAnyTime && ORIGINAL_EVENT_START_RAW){
+      startDb = ORIGINAL_EVENT_START_RAW;
+    }
+
+    const orderIndex = f_order.value === '' ? null : Number(f_order.value);
+
+    // ✅ metaObj SIEMPRE definido en este scope
+    let metaObj = {};
+    const metaRaw = f_meta.value.trim();
+    if (metaRaw) {
+      try {
+        metaObj = JSON.parse(metaRaw);
+      } catch (e) {
+        showToast('warn', 'Metadata', 'No es JSON válido. Corrígelo o déjalo vacío.');
+        return;
+      }
+    }
+
+    const bookingRef = (f_booking_ref.value || '').trim();
+
+    // ✅ Regla nueva:
+    // 1) Si el input trae valor, mandamos ese valor (source of truth)
+    // 2) Si está vacío, NO tocamos lo que venga en el JSON
+    if (bookingRef) {
+      metaObj.booking_ref = bookingRef;
+    }
+
+    const payload = {
+      trip_id: activeTripId,
+      title,
+      type: f_type.value,
+      start_time: startDb,
+      order_index: (Number.isFinite(orderIndex) ? orderIndex : null),
+      location: f_location.value.trim() || null,
+      source: f_source.value || 'manual',
+      description: f_desc.value.trim() || null,
+      metadata: metaObj
     };
 
+    if (!editingEventId) {
+      const { error } = await sb.from('events').insert(payload);
+      if (error) {
+        reportDbError('Crear evento', error);
+        return;
+      }
+      showToast('ok', 'Evento creado', 'Guardado correctamente.');
+      closeModal();
+      loadEvents(activeTripId);
+      return;
+    }
+
+    const { data, error } = await sb
+      .from('events')
+      .update(payload)
+      .eq('id', editingEventId)
+      .select('*')
+      .single();
+
+    if (error) {
+      reportDbError('Guardar evento', error);
+      return;
+    }
+
+    if (!data) {
+      showToast('warn', 'Guardar evento', 'No se devolvió el registro actualizado. Revisa RLS/policies.');
+    } else {
+      showToast('ok', 'Evento actualizado', 'Cambios guardados.');
+    }
+
+    closeModal();
+    loadEvents(activeTripId);
+  };
+    
     async function deleteTripById(tripId){
       const ok = confirm('¿Seguro que quieres borrar este viaje?');
       if (!ok) return;
