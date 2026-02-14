@@ -883,6 +883,60 @@ body.is-compact .timeline-card .meta {
   width: 16px;
   height: 16px;
 }
+
+/* ============================================================
+  ✅ MODO COMPACTO — FORZAR controles grandes (arriba y timeline)
+  - Cubre botones aunque NO usen .toolbar/.btn/.chip
+============================================================ */
+
+/* Cualquier botón/input/select dentro de toolbars comunes */
+body.compact .toolbar button,
+body.compact .toolbar .btn,
+body.compact .toolbar a.btn,
+body.compact .toolbar input,
+body.compact .toolbar select,
+body.compact .toolbar label.toggle,
+
+/* Barra superior (por si tu HTML usa otro contenedor) */
+body.compact header button,
+body.compact header .btn,
+body.compact .topbar button,
+body.compact .topbar .btn,
+body.compact .actions button,
+body.compact .actions .btn,
+body.compact .view-controls button,
+body.compact .view-controls .btn,
+
+/* “botones sueltos” que no traen clase */
+body.compact button,
+body.compact .icon-btn,
+body.compact .chip,
+body.compact .toggle {
+  padding: 4px 8px !important;
+  font-size: 11px !important;
+  line-height: 1.1 !important;
+  border-radius: 10px !important;
+}
+
+/* Iconos dentro de botones (si usas <span class="icon"> o svg) */
+body.compact button svg,
+body.compact .btn svg,
+body.compact .icon-btn svg,
+body.compact .chip svg,
+body.compact .btn .icon,
+body.compact .icon-btn .icon {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Reduce altura mínima si algún botón trae min-height grande */
+body.compact button,
+body.compact .btn,
+body.compact .chip,
+body.compact .toggle {
+  min-height: 28px !important;
+}
+
     
   </style>
 </head>
