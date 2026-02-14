@@ -3579,32 +3579,39 @@ function closeModal(){
 
 /* ============================================================
   ✅ MODO COMPACTO (toggle)
-  - Aplica clase "compact" al BODY para compactar toda la UI
+  - Aplica clase "compact" al <body> para compactar la UI
 ============================================================ */
+
 const compactToggle = document.getElementById('compactToggle');
+const COMPACT_STORAGE_KEY = 'mytrips:compactOn';
 
 function readCompactPref(){
-  try{ return localStorage.getItem('mytrips:compactOn') === '1'; }catch(e){ return false; }
+  try { return localStorage.getItem(COMPACT_STORAGE_KEY) === '1'; }
+  catch(e){ return false; }
 }
+
 function persistCompactPref(on){
-  try{ localStorage.setItem('mytrips:compactOn', on ? '1' : '0'); }catch(e){}
+  try { localStorage.setItem(COMPACT_STORAGE_KEY, on ? '1' : '0'); }
+  catch(e){}
 }
+
 function applyCompact(on){
-  document.body.classList.toggle('compact', !!on);
-  if (compactToggle) compactToggle.checked = !!on;
-  persistCompactPref(!!on);
+  const enabled = !!on;
+  document.body.classList.toggle('compact', enabled);
+  if (compactToggle) compactToggle.checked = enabled;
+  persistCompactPref(enabled);
 }
 
 if (compactToggle){
   compactToggle.addEventListener('change', () => {
-    applyCompact(!!compactToggle.checked);
+    applyCompact(compactToggle.checked);
   });
 
   // ✅ aplica preferencia al cargar (persistente)
   applyCompact(readCompactPref());
 } else {
   console.warn('[MyTrips] No se encontró #compactToggle');
-}    
+}
 
 /* ============================================================
   ✅ NUEVO: copiar badge con feedback visual (Reserva/Ref)
