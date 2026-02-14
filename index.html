@@ -3649,6 +3649,11 @@ function persistCompactPref(on){
   catch(e){}
 }
 
+function hasCompactPref(){
+  try { return localStorage.getItem(COMPACT_STORAGE_KEY) !== null; }
+  catch(e){ return false; }
+}
+
 function applyCompact(on){
   const enabled = !!on;
   document.body.classList.toggle('compact', enabled);
@@ -3657,12 +3662,20 @@ function applyCompact(on){
 }
 
 if (compactToggle){
+
   compactToggle.addEventListener('change', () => {
     applyCompact(compactToggle.checked);
   });
 
-  // ✅ aplica preferencia al cargar (persistente)
-  applyCompact(readCompactPref());
+  // 🔥 AUTO-COMPACT EN MÓVIL (solo primera vez)
+  const IS_MOBILE = window.matchMedia('(max-width: 820px)').matches;
+
+  if (IS_MOBILE && !hasCompactPref()){
+    applyCompact(true);   // móvil: compacto por defecto
+  } else {
+    applyCompact(readCompactPref()); // respeta preferencia guardada
+  }
+
 } else {
   console.warn('[MyTrips] No se encontró #compactToggle');
 }
