@@ -3456,6 +3456,35 @@ function closeModal(){
     })();
 
 /* ============================================================
+  ✅ MODO COMPACTO (toggle)
+  - Aplica clase "compact" al BODY para compactar toda la UI
+============================================================ */
+const compactToggle = document.getElementById('compactToggle');
+
+function readCompactPref(){
+  try{ return localStorage.getItem('mytrips:compactOn') === '1'; }catch(e){ return false; }
+}
+function persistCompactPref(on){
+  try{ localStorage.setItem('mytrips:compactOn', on ? '1' : '0'); }catch(e){}
+}
+function applyCompact(on){
+  document.body.classList.toggle('compact', !!on);
+  if (compactToggle) compactToggle.checked = !!on;
+  persistCompactPref(!!on);
+}
+
+if (compactToggle){
+  compactToggle.addEventListener('change', () => {
+    applyCompact(!!compactToggle.checked);
+  });
+
+  // ✅ aplica preferencia al cargar (persistente)
+  applyCompact(readCompactPref());
+} else {
+  console.warn('[MyTrips] No se encontró #compactToggle');
+}    
+
+/* ============================================================
   ✅ NUEVO: copiar badge con feedback visual (Reserva/Ref)
 ============================================================ */
 async function copyBadgeWithFeedback(el, text){
