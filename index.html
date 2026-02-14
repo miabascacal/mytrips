@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+F<!DOCTYPE html>
 <html lang="es">
 <head>
   <!-- ============================================================
@@ -3817,6 +3817,25 @@ function isIOSReal(){
     return false;
   }
 }
+
+// ============================================================
+// ✅ TIME HELPERS (mostrar inicio–fin en tarjetas)
+// ============================================================
+function fmtTimeLocal(isoNoTz){
+  if (!isoNoTz) return '';
+  const [d, t] = String(isoNoTz).split('T');
+  if (!d || !t) return '';
+  const [Y,M,D] = d.split('-').map(Number);
+  const [hh,mm,ss] = t.split(':').map(Number);
+  const dt = new Date(Y, (M||1)-1, D||1, hh||0, mm||0, ss||0);
+  return dt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeRangeLabel(ev){
+  const a = fmtTimeLocal(ev?.start_time);
+  const b = fmtTimeLocal(ev?.end_time);
+  return (b && b !== a) ? `${a} – ${b}` : a;
+}    
     
   </script>
 </body>
