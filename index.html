@@ -936,11 +936,14 @@ RESUMEN DE ESTA PARTE:
         <button id="shareWaBtn" class="btn" data-action="share-whatsapp">🟢 WhatsApp</button>
         <button id="shareTgBtn" class="btn" data-action="share-telegram">🔵 Telegram</button>
 
-        <!-- ✅ NUEVO: toggle auto-refresh -->
-        <label class="toggle" title="Si lo apagas, MyTrips NO recarga sola (no te borra pruebas)">
-          <input id="autoRefreshToggle" type="checkbox" />
-          Auto-refresh
-        </label>
+      <!-- ============================================================
+         -- Autorefresh desactivado --
+        ============================================================ -->
+        <!-- toggle auto-refresh -->
+        <!label class="toggle" title="Si lo apagas, MyTrips NO recarga sola (no te borra pruebas)">
+          <!input id="autoRefreshToggle" type="checkbox" />
+          <!Auto-refresh
+        <!/label>
 
         <label class="toggle" title="Reduce tamaños del timeline para ver más eventos">
           <input id="compactToggle" type="checkbox" />
@@ -1449,8 +1452,8 @@ RESUMEN DE ESTA PARTE:
     }, true);
 
     /* ============================================================
-      ✅ NUEVO: AUTO-REFRESH toggle (sin borrar pruebas)
-    ============================================================ */
+      ✅ BACKUP (DESACTIVADO): AUTO-REFRESH toggle
+    ============================================================ 
     const autoRefreshToggle = document.getElementById('autoRefreshToggle');
     let AUTO_REFRESH_TIMER = null; // ✅ NUEVO: id del timer
 
@@ -1500,6 +1503,8 @@ RESUMEN DE ESTA PARTE:
       });
       applyAutoRefreshPref(readAutoRefreshPref(), true);
     }
+    
+    */
 
     /* ============================================================
       ✅ FASE 1 (NUEVO): IMPORTACIÓN RÁPIDA (Excel + PDFs)
